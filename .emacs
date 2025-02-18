@@ -1,3 +1,5 @@
+(require 'package)
+
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 
 ;;(let ((default-directory "~/.emacs.d/site-lisp/"))
@@ -92,8 +94,16 @@
 (set-default 'truncate-lines t)
 (setq inhibit-startup-screen t)
 
-(require 'evil)
 (evil-mode 1)
+(require 'evil)
+;; (defun enable-evil-only-in-text-modes ()
+;;   "Enable Evil mode only in text-related buffers."
+;;   (when (derived-mode-p 'prog-mode 'text-mode)
+;;     (evil-local-mode 1)))  ;; Enable Evil only for programming & text modes
+
+;; (add-hook 'after-change-major-mode-hook 'enable-evil-only-in-text-modes)
+
+;;(require 'efar)
 
 (require 'powerline)
 (powerline-default-theme)
@@ -254,7 +264,6 @@
 (require 'kwu5-mode)
 (add-to-list 'auto-mode-alist '("\\tape1\\'" . kwu5-mode))
 
-
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -263,7 +272,7 @@
  '(default ((t (:family "Consolas" :foundry "outline" :slant normal :weight normal :height 98 :width normal))))
  '(vdiff-subtraction-face ((t (:inherit diff-added)))))
 
-(setq-default line-spacing 0.1)
+;;(setq-default line-spacing 0.1)
 
 (setq frame-title-format '(buffer-file-name "Emacs: %b (%f)" "Emacs: %b"))
 
@@ -841,29 +850,82 @@ as input."
 
 (add-to-list 'default-frame-alist '(font . "Consolas 10"))
 
-(setq dired-guess-shell-alist-user
-      '(("\\.pdf\\'" "inkscape ? &")
-        ("\\.emf\\'" "inkscape ? &")
-        ("\\.pdf\\'" "gsview ? &")
-        ("\\.mp3\\'" "vlc ? &")
-        ("\\.mp4\\'" "vlc ? &")
-        ;;("\\.png\\'" "C:/Users/bdulauroy/Documents/work/Apps/Pixia/pixia.exe ? &")
-        ;;("\\.jpg\\'" "C:/Users/bdulauroy/Documents/work/Apps/Pixia/pixia.exe ? &")
-        ;;("\\.JPG\\'" "C:/Users/bdulauroy/Documents/work/Apps/Pixia/pixia.exe ? &")
-        ("\\.png\\'" "gimp ? &")
-        ("\\.jpg\\'" "gimp ? &")
-        ("\\.JPG\\'" "gimp ? &")
-        ("\\.plt\\'" "gnuplot ? &")
-        ("\\.dem\\'" "gnuplot ? &")
-        ("\\.gp\\'" "gnuplot ? &")
-        ("\\.svg\\'" "inkscape ? &")
-        ("\\.eps\\'" "inkscape ? &")
-        ("\\.zip\\'" "C:/Program Files/7-zip/7zfm.exe ? &")
-        ("\\.ps\\'" "inkscape ? &")
-        ))
+;; (Setq dired-guess-shell-alist-user
+;;       '(("\\.pdf\\'" "inkscape ? &")
+;;         ("\\.emf\\'" "inkscape ? &")
+;;         ("\\.pdf\\'" "gsview ? &")
+;;         ("\\.mp3\\'" "vlc ? &")
+;;         ("\\.mp4\\'" "ffplay ? &")
+;;         ("\\.mkv\\'" "ffplay ? &")
+;;         ("\\.avi\\'" "ffplay ? &")
+;;         ("\\.png\\'" "gimp ? &")
+;;         ("\\.jpg\\'" "gimp ? &")
+;;         ("\\.JPG\\'" "gimp ? &")
+;;         ("\\.plt\\'" "gnuplot ? &")
+;;         ("\\.dem\\'" "gnuplot ? &")
+;;         ("\\.gp\\'" "gnuplot ? &")
+;;         ("\\.svg\\'" "inkscape ? &")
+;;         ("\\.eps\\'" "inkscape ? &")
+;;         ("\\.zip\\'" "C:/Program Files/7-zip/7zfm.exe ? &")
+;;         ("\\.ps\\'" "inkscape ? &")
+;;         ))
 
-(add-to-list 'Info-default-directory-list "c:/Program Files (X86)/gnuplot/bin/gnuplot.exe")
+;; (add-to-list 'Info-default-directory-list "c:/Program Files (X86)/gnuplot/bin/gnuplot.exe")
 
+(defun dired-open-with-choice ()
+  "Prompt for a program to open the current file in `dired` with a default choice and display all options."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (file-url (concat "file:///" (replace-regexp-in-string "\\\\" "/" file))) ;; Convert path to VLC format
+         (choices (cond
+                   ((string-match "\\.pdf\\'" file) 
+                    '("C:/PortableApps/SumatraPDF/SumatraPDF.exe"
+                      "C:/PortableApps/Inkscape/bin/inkscape.exe"
+                      "C:/Program Files/Tracker Software/PDF Editor/PDFXEdit.exe"
+                      "C:/Program Files/Adobe/Acrobat DC/Acrobat/Acrobat.exe"
+                      "C:/Program Files/Inkscape/inkscape.exe"
+                      "C:/Program Files/Artifex Software/gsview6.0/bin/gsview.exe"
+                      "C:/Program Files (x86)/Adobe/Acrobat DC/Acrobat/Acrobat.exe"))
+                   ((string-match "\\.\\(mp4\\|mkv\\|mpg\\|avi\\|m4v\\)\\'" file) 
+                    '("C:/Program Files/VideoLAN/VLC/vlc.exe"
+                      "C:/Apps/ffmpeg/bin/ffplay.exe"))
+                   ((string-match "\\.\\(ps\\|eps\\)\\'" file) 
+                    '("C:/Program Files/Inkscape/inkscape.exe"
+                      "C:/Program Files/Artifex Software/gsview6.0/bin/gsview.exe"))
+                   ((string-match "\\.\\(png\\|jpg\\|jpeg\\|bmp\\|gif\\|tif\\)\\'" file) 
+                    '("C:/Apps/ffmpeg/bin/ffplay.exe"
+                      "C:/Program Files/GIMP 2/bin/gimp-2.10.exe"))
+                   ((string-match "\\.\\(svg\\|emf\\|wmf\\)\\'" file) 
+                    '("C:/Program Files/Inkscape/inkscape.exe"))
+                   ((string-match "\\.\\(plt\\|gp\\|dem\\)\\'" file) 
+                    '("C:/Program Files/gnuplot/bin/gnuplot.exe"))
+                   ((string-match "\\.\\(zip\\|7z\\|rar\\|tar.xz\\|tar.gz\\|.gz\\|.tar\\)\\'" file) 
+                    '("C:/Program Files/7-Zip/7zFM.exe"))
+                   (t nil)))
+         (default-program (car choices))
+         (program (if choices
+                      (helm-comp-read (format "Open with (default: %s): " default-program)
+                                      choices
+                                      :default default-program
+                                      :must-match t)
+                    (error "No associated programs for this file type"))))
+    
+    (when program
+      (cond
+       ((string-match "ffplay.exe" program)
+        (call-process-shell-command (concat "\"" program "\" " (shell-quote-argument file)) nil 0))
+
+       ((string-match "vlc.exe" program)
+        (call-process-shell-command (concat "\"" program "\" " file-url) nil 0))
+
+       ;; Default behavior for other programs
+       (t (start-process "dired-open" nil program file))))))
+    
+(define-key dired-mode-map (kbd "!") 'dired-open-with-choice)
+
+
+
+   
 ;; Set Frame width/height (can be set in ~/.Xdefaults too) size depends if ETX or others
 (setq default-frame-alist
       '((top . 40) (left . 225) (width . 200) (height . 55)))
@@ -965,58 +1027,7 @@ as input."
 ;;     (async-shell-command (concat "pscp.exe -r " remote-user "@" remote-host ":" remote-path " " local-file))
 ;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
 
-(defun copy-remote-to-local ()
-  (interactive)
-  (let* ((remote-file (dired-get-filename))
-         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-         (local-buffer (window-buffer (next-window)))
-         (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
-         (local-file (concat local-dir (file-name-nondirectory remote-path)))
-         (buffer-name (generate-new-buffer-name
-                       (format "*Copy Remote to Local: %s@%s:%s to %s*"
-                               remote-user
-                               remote-host
-                               (file-name-nondirectory remote-path)
-                               (file-name-nondirectory local-file)))))
-    (select-window (next-window)) ; Switch to the Tramp window
-    (async-shell-command (concat "pscp.exe -r "
-                                 remote-user "@" remote-host ":"
-                                 remote-path " " local-file)
-                         buffer-name)  ; Use the generated unique buffer name
-    (select-window (get-buffer-window local-buffer))  ; Switch back to the local window
-    (pop-to-buffer buffer-name)))  ; Display the new buffer
 
-
-(defun copy-local-to-remote ()
-(interactive)
-(let* ((local-file (dired-get-filename))
-        (is-directory (file-directory-p local-file))
-        (remote-buffer (window-buffer (next-window)))
-        (remote-dir (with-current-buffer remote-buffer default-directory))
-        (remote-file (if is-directory
-                        remote-dir
-                    (concat remote-dir (file-name-nondirectory local-file))))
-        (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-        (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-        (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-        (local-buffer (window-buffer (next-window)))
-        ;; Generate a unique buffer name
-        (buffer-name (generate-new-buffer-name
-                    (format "*Copy Local to Remote: %s to %s@%s:%s*"
-                            (file-name-nondirectory local-file)
-                            remote-user
-                            remote-host
-                            (file-name-nondirectory remote-path)))))
-(async-shell-command (concat "pscp.exe "
-                                (if is-directory "-r ")
-                                local-file " "
-                                remote-user "@" remote-host ":"
-                                remote-path)
-                        buffer-name)
-(select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
-   
 ;; (defun copy-remote-to-local ()
 ;;   (interactive)
 ;;   (let* ((remote-file (dired-get-filename))
@@ -1041,6 +1052,122 @@ as input."
 ;;                                    (concat (dired-current-directory) (file-name-nondirectory remote-path))))
 ;;                          buffer-name)
 ;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
+
+;; (defun copy-remote-to-local ()
+;;   (interactive)
+;;   (let* ((remote-file (dired-get-filename))
+;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
+;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
+;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
+;;          (local-buffer (window-buffer (next-window)))
+;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
+;;          (local-file (concat local-dir (file-name-nondirectory remote-path)))
+;;          (buffer-name (generate-new-buffer-name
+;;                        (format "*Copy Remote to Local: %s@%s:%s to %s*"
+;;                                remote-user
+;;                                remote-host
+;;                                (file-name-nondirectory remote-path)
+;;                                (file-name-nondirectory local-file)))))
+;;     (select-window (next-window)) ; Switch to the Tramp window
+;;     (async-shell-command (concat "pscp.exe -r "
+;;                                  remote-user "@" remote-host ":"
+;;                                  remote-path " " local-file)
+;;                          buffer-name)  ; Use the generated unique buffer name
+;;     (select-window (get-buffer-window local-buffer))  ; Switch back to the local window
+;;     (pop-to-buffer buffer-name)))  ; Display the new buffer
+
+
+;; (defun copy-local-to-remote ()
+;; (interactive)
+;; (let* ((local-file (dired-get-filename))
+;;         (is-directory (file-directory-p local-file))
+;;         (remote-buffer (window-buffer (next-window)))
+;;         (remote-dir (with-current-buffer remote-buffer default-directory))
+;;         (remote-file (if is-directory
+;;                         remote-dir
+;;                     (concat remote-dir (file-name-nondirectory local-file))))
+;;         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
+;;         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
+;;         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
+;;         (local-buffer (window-buffer (next-window)))
+;;         ;; Generate a unique buffer name
+;;         (buffer-name (generate-new-buffer-name
+;;                     (format "*Copy Local to Remote: %s to %s@%s:%s*"
+;;                             (file-name-nondirectory local-file)
+;;                             remote-user
+;;                             remote-host
+;;                             (file-name-nondirectory remote-path)))))
+;; (async-shell-command (concat "pscp.exe "
+;;                                 (if is-directory "-r ")
+;;                                 local-file " "
+;;                                 remote-user "@" remote-host ":"
+;;                                 remote-path)
+;;                         buffer-name)
+;; (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
+   
+;; (defun copy-file-remote-or-local ()
+;;   "Copy selected file between remote and local and update Dired buffer."
+;;   (interactive)
+;;   (let* ((current-file (dired-get-filename)))
+;;     (if (file-remote-p current-file)
+;;         (progn
+;;           (copy-remote-to-local)
+;;           (dired-revert))
+;;       (progn
+;;         (copy-local-to-remote)
+;;         (dired-revert)))))
+
+;; (global-set-key (kbd "C-x c") 'copy-file-remote-or-local)
+(defun copy-local-to-remote ()
+  (interactive)
+  (let* ((local-file (dired-get-filename))
+         (is-directory (file-directory-p local-file))
+         (remote-buffer (window-buffer (or (window-next-sibling) (error "No next window available"))))
+         (remote-dir (with-current-buffer remote-buffer default-directory))
+         (remote-file (if is-directory
+                          remote-dir
+                        (concat remote-dir (file-name-nondirectory local-file))))
+         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
+         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
+         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
+         (local-buffer (current-buffer))
+         ;; Generate a unique buffer name
+         (buffer-name (generate-new-buffer-name
+                       (format "*Copy Local to Remote: %s to %s@%s:%s*"
+                               (file-name-nondirectory local-file)
+                               remote-user
+                               remote-host
+                               (file-name-nondirectory remote-path)))))
+    (async-shell-command (concat "pscp.exe "
+                                 (if is-directory "-r ")
+                                 local-file " "
+                                 remote-user "@" remote-host ":"
+                                 remote-path)
+                         buffer-name)
+    (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
+
+(defun copy-remote-to-local ()
+  (interactive)
+  (let* ((remote-file (dired-get-filename))
+         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
+         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
+         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
+         (local-buffer (window-buffer (next-window)))
+         (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
+         (local-file (concat local-dir (file-name-nondirectory remote-path)))
+         (buffer-name (generate-new-buffer-name
+                       (format "*Copy Remote to Local: %s@%s:%s to %s*"
+                               remote-user
+                               remote-host
+                               (file-name-nondirectory remote-path)
+                               (file-name-nondirectory local-file)))))
+    (select-window (next-window)) ; Switch to the Tramp window
+    (async-shell-command (concat "pscp.exe -r "
+                                 remote-user "@" remote-host ":"
+                                 remote-path " " local-file)
+                         buffer-name)  ; Use the generated unique buffer name
+    (select-window (get-buffer-window local-buffer))  ; Switch back to the local window
+    (pop-to-buffer buffer-name)))  ; Display the new buffer
 
 (defun copy-file-remote-or-local ()
   "Copy selected file between remote and local and update Dired buffer."
@@ -1117,7 +1244,6 @@ as input."
 
 (global-set-key (kbd "C-c j") 'create-script-with-shebang)
 
-(add-hook 'doc-view-mode-hook (lambda () (doc-view-fit-height-to-window)))
 
 (defun eplot (files gnuplot-filename xlabel ylabel title y-column skip-lines)
   "Run a Gnuplot script with specified parameters for multiple files."
@@ -1222,3 +1348,185 @@ replot
 (global-set-key (kbd "C-x C-k") 'close-all-buffers)
 
 (setq visible-bell t)
+
+;; Custom function to resize window left
+(defun my-shrink-window-horizontally ()
+  "Shrink the window horizontally by 10 steps."
+  (interactive)
+  (shrink-window-horizontally 10))
+
+;; Custom function to resize window right
+(defun my-enlarge-window-horizontally ()
+  "Enlarge the window horizontally by 10 steps."
+  (interactive)
+  (enlarge-window-horizontally 10))
+
+;; Rebind C-x { and C-x } to use the new functions
+(global-set-key (kbd "C-x {") 'my-shrink-window-horizontally)
+(global-set-key (kbd "C-x }") 'my-enlarge-window-horizontally)
+
+;; Define an asynchronous delete function
+(defun dired-async-delete ()
+  "Asynchronously delete the marked files or directories in Dired."
+  (interactive)
+  (let ((files (dired-get-marked-files))) ;; Get marked files in Dired
+    (if (yes-or-no-p (format "Asynchronously delete %d marked file(s)? " (length files)))
+        (async-start
+         `(lambda ()
+            (require 'dired) ;; Ensure Dired functions are available
+            (mapc #'(lambda (file)
+                      (if (file-directory-p file)
+                          (delete-directory file t) ;; Recursively delete directories
+                        (delete-file file)))
+                  ',files))
+         (lambda (_)
+           (message "Asynchronous delete completed.")))
+      (message "Async delete canceled."))))
+
+;; Bind the asynchronous delete function to a specific key (e.g., `A` for async-delete)
+(define-key dired-mode-map (kbd "A") 'dired-async-delete)
+
+;; (defun dired-send-to-remote ()
+;;   "Send the selected file or folder to a remote Linux directory using `pscp.exe`.
+;; First, choose a root destination:
+;; 1. `/urrnfs01/bdulauro/` (default: Home)
+;; 2. `/TEMP/bdulauro/`
+;; Then, optionally enter a subdirectory."
+;;   (interactive)
+;;   (let* ((pscp-path "C:/Program Files (x86)/PuTTY/pscp.exe") ;; Adjust if needed
+;;          (file (dired-get-file-for-visit))  ;; Get selected file or folder
+;;          (file-name (file-name-nondirectory file)) ;; Extract filename
+;;          (roots '(("Home" . "bdulauro@ausrichhpci03:/urrnfs01/bdulauro/")
+;;                   ("TEMP" . "bdulauro@ausrichhpci03:/TEMP/bdulauro/")))
+;;          (root-choice (assoc (completing-read "Select destination root: " (mapcar #'car roots) 
+;;                                               nil t "Home") roots)) ;; Pre-filled "Home" as default
+;;          (default-dest (cdr root-choice))
+;;          (subdir (read-string (format "Subdirectory (default: %s): " default-dest) "")) ;; Optional subdir
+;;          (destination (concat default-dest (if (string-empty-p subdir) "" (concat subdir "/")) file-name))
+;;          (pscp-command (format "\"%s\" \"%s\" \"%s\"" pscp-path file destination)))
+;;     (message "Running: %s" pscp-command)  ;; Debug message
+;;     (async-shell-command pscp-command)))  ;; Run command asynchronously
+
+;; ;; Assign shortcut key in Dired mode (e.g., "C-c s")
+;; (define-key dired-mode-map (kbd "C-c s") 'dired-send-to-remote)
+
+(defun dired-send-to-remote ()
+  "Send selected files or folders to a remote Linux directory using `pscp.exe`.
+First, choose a root destination:
+1. `/urrnfs01/bdulauro/` (default: Home)
+2. `/TEMP/bdulauro/`
+Then, optionally enter a subdirectory."
+  (interactive)
+  (let* ((pscp-path "C:/Program Files (x86)/PuTTY/pscp.exe") ;; Adjust if needed
+         (files (dired-get-marked-files))  ;; Get all selected files
+         (roots '(("Home" . "bdulauro@ausrichhpci03:/urrnfs01/bdulauro/")
+                  ("TEMP" . "bdulauro@ausrichhpci03:/TEMP/bdulauro/")))
+         (root-choice (assoc (completing-read "Select destination root: " (mapcar #'car roots) 
+                                              nil t "Home") roots)) ;; Pre-filled "Home" as default
+         (default-dest (cdr root-choice))
+         (subdir (read-string (format "Subdirectory (default: %s): " default-dest) "")) ;; Optional subdir
+         (destination-dir (concat default-dest (if (string-empty-p subdir) "" (concat subdir "/")))))
+
+    ;; Loop over all selected files and send them one by one
+    (dolist (file files)
+      (let* ((file-name (file-name-nondirectory file)) ;; Extract filename
+             (destination (concat destination-dir file-name))
+             (pscp-command (format "\"%s\" \"%s\" \"%s\"" pscp-path file destination)))
+        (message "Running: %s" pscp-command)  ;; Debug message
+        (async-shell-command pscp-command)))))  ;; Run command asynchronously
+
+;; Assign shortcut key in Dired mode (e.g., "C-c s")
+;; (define-key dired-mode-map (kbd "C-c s") 'dired-send-to-remote)
+
+(defun dired-receive-from-remote ()
+  "Download selected files from a remote Linux directory using `pscp.exe`.
+Files are saved to `c:/Users/bdulauroy/` by default, but you can specify a subdirectory."
+  (interactive)
+  (let* ((pscp-path "C:/Program Files (x86)/PuTTY/pscp.exe") ;; Adjust if needed
+         (files (dired-get-marked-files))  ;; Get all selected remote files
+         (default-local "c:/Users/bdulauroy/") ;; Default local directory
+         (subdir (read-string (format "Subdirectory (default: %s): " default-local) "")) ;; Optional subdir
+         (local-destination (concat default-local (if (string-empty-p subdir) "" (concat subdir "/")))))
+
+    ;; Ensure we execute the command locally (not on the remote)
+    (with-temp-buffer
+      (dolist (file files)
+        (let* ((remote-file (replace-regexp-in-string "^/psftp:[^:]+:" "" file)) ;; Extract remote path
+               (remote-full-path (concat "bdulauro@ausrichhpci03:" remote-file)) ;; Add SCP remote user/host
+               (local-file (concat local-destination (file-name-nondirectory remote-file)))
+               (pscp-command (format "\"%s\" -r \"%s\" \"%s\"" pscp-path remote-full-path local-file)))
+          (message "Running: %s" pscp-command)  ;; Debug message
+          (call-process-shell-command pscp-command nil 0))))))
+
+;; Assign shortcut key in Dired mode (e.g., "C-c r")
+;; (define-key dired-mode-map (kbd "C-c r") 'dired-receive-from-remote)
+
+(defun dired-transfer-auto ()
+  "Automatically transfer selected files between local and remote using `pscp.exe`.
+If the current Dired buffer is local, it uploads files to the remote.
+If the current Dired buffer is remote (`psftp:`), it downloads files to the local machine."
+  (interactive)
+  (if (string-match "^/psftp:" default-directory)
+      (progn
+        (message "Remote directory detected. Downloading files...")
+        (dired-receive-from-remote))  ;; Download from remote
+    (progn
+      (message "Local directory detected. Uploading files...")
+      (dired-send-to-remote))))  ;; Upload to remote
+
+;; Assign the unified command to a single keybinding
+(define-key dired-mode-map (kbd "C-c s") 'dired-transfer-auto)
+
+;;(setq image-dired-dir "c:/Users/bdulauroy/emacs-thumbnails/")
+(setq image-dired-debug t)
+
+(defun my-image-dired-create-thumb (original-file thumbnail-file)
+  "Custom version of `image-dired-create-thumb` for Windows using ffmpeg."
+  (let* ((corrected-thumb-file (concat (file-name-sans-extension thumbnail-file) ".jpg"))
+         (cmd (concat "ffmpeg -i "
+                      (shell-quote-argument original-file)
+                      " -vf scale=128:128 "
+                      (shell-quote-argument corrected-thumb-file))))
+    (message "Running command: %s" cmd)  ;; Log the actual command
+    (shell-command cmd)
+    ;; Ensure Emacs knows the thumbnail is in JPG format
+    (rename-file corrected-thumb-file thumbnail-file t)))
+
+;; Override the built-in function
+(advice-add 'image-dired-create-thumb :override #'my-image-dired-create-thumb)
+
+(setq doc-view-ghostscript-program "C:/Program Files/gs/gs9.23/bin/gswin64c.exe")  ;; Use Ghostscript
+(setq doc-view-resolution 80)            ;; Lower resolution for faster loading
+(setq doc-view-cache-directory "~/.emacs.d/docview-cache")
+(setq doc-view-continuous t)
+(setq auto-mode-alist
+      (append '(("\\.ps\\'" . doc-view-mode)
+                ("\\.eps\\'" . doc-view-mode))
+              auto-mode-alist))
+
+(define-key dired-mode-map (kbd "i") 'image-dired-dired-display-image)
+
+(setq eshell-prompt-function
+      (lambda ()
+        (concat (propertize "Î» " 'face '(:foreground "magenta" :bold t)))))
+
+(global-set-key (kbd "C-c l") 'display-line-numbers-mode)
+
+(defun preview-xls-as-csv ()
+  "Convert an XLS/XLSX file to CSV using Python and open it in Emacs."
+  (interactive)
+  (let* ((xls-file (read-file-name "Select XLS/XLSX file: "))
+         (csv-file (concat (file-name-sans-extension xls-file) ".csv"))
+         (python-script "c:/Apps/bin/xls_to_csv.py")  ;; Change to your script path
+         (command (format "python3 '%s' '%s' '%s'" python-script xls-file csv-file)))
+    (if (file-exists-p python-script)
+        (progn
+          (shell-command command)
+          (if (file-exists-p csv-file)
+              (progn
+                (find-file csv-file)
+                (csv-mode))
+            (error "Failed to convert %s" xls-file)))
+      (error "Python conversion script not found!"))))
+
+(global-set-key (kbd "C-c v x") 'preview-xls-as-csv)
