@@ -13,12 +13,26 @@
 
 (setq byte-compile-warnings '(cl-functions))
 
-;;https://www.reddit.com/r/emacs/comments/sv2ys8/emacs_noob_here_how_do_i_get_redo_functionality/
-;;(evil-set-undo-system 'undo-redo)
-;;https://github.com/syl20bnr/spacemacs/issues/14036   
-;;https://gitlab.com/ideasman42/emacs-undo-fu
-;;(global-undo-tree-mode)
-;;(evil-set-undo-system 'undo-tree)
+;; update my emacs packages
+(defun my/update-elpa-packages ()
+  "Update all installed ELPA packages without prompting."
+  (interactive)
+  (require 'package)
+  (package-initialize)
+  (package-refresh-contents)
+  (let ((upgraded 0))
+    (dolist (pkg package-alist)
+      (let* ((name (car pkg))
+             (installed (cadr pkg))
+             (available (car (cdr (assq name package-archive-contents)))))
+        (when (and available
+                   (version-list-< (package-desc-version installed)
+                                   (package-desc-version available)))
+          (package-install available)
+          (setq upgraded (1+ upgraded)))))
+    (message "ELPA update complete: %d package(s) upgraded" upgraded)))
+
+(setq evil-undo-system 'undo-redo)
 
 (defun ido-remove-tramp-from-cache nil
   "Remove any TRAMP entries from `ido-dir-file-cache'.
@@ -35,8 +49,6 @@
   (ido-remove-tramp-from-cache)
   (ido-save-history))
 
-;;(with-eval-after-load 'dired (require 'dired-filetype-face))
-
 ;; Details toggling is bound to "(" in `dired-mode' by default
 (setq diredp-hide-details-initially-flag nil)
 ;;(setq diredp-hide-details-propagate-flag nil)
@@ -47,13 +59,19 @@
 (global-set-key [f5] 'uncomment-region)
 (global-set-key [f6] 'comment-region)
 (defun my-random-theme ()
-  "Load a random theme from the list at startup."
+  "Load a random theme from the list at startup and print the loaded theme name."
   (interactive)
-  (let ((themes-list '(twilight-bright
-                       modus-operandi
+  (let ((themes-list '(modus-operandi
+                       twilight-bright
                        modus-vivendi
                        spacemacs-light
                        spacemacs-dark
+                       cyberpunk
+                       alect-light
+                       alect-dark
+                       ample
+                       ample-flat
+                       ample-light
                        solarized-light
                        solarized-dark
                        monokai-pro
@@ -70,9 +88,9 @@
                        doom-spacegrey
                        doom-nord-light
                        dracula
+                       zenburn
                        material-light
                        material
-                       zenburn
                        gruvbox-light-medium
                        doom-dracula
                        doom-opera
@@ -83,9 +101,10 @@
                        moe-light
                        leuven
                        doom-one
-                       gruvbox
-                       )))
-    (load-theme (nth (random (length themes-list)) themes-list) t)))
+                       gruvbox)))
+    (let ((chosen-theme (nth (random (length themes-list)) themes-list)))
+      (load-theme chosen-theme t)
+      (message "Loaded theme: %s" chosen-theme))))
 
 (my-random-theme)
 
@@ -95,7 +114,7 @@
 (setq inhibit-startup-screen t)
 
 (evil-mode 1)
-(require 'evil)
+;; (require 'evil)
 ;; (defun enable-evil-only-in-text-modes ()
 ;;   "Enable Evil mode only in text-related buffers."
 ;;   (when (derived-mode-p 'prog-mode 'text-mode)
@@ -181,6 +200,9 @@
 (require 'multiple-cursors)
 (global-set-key (kbd "C-x j") 'mc/edit-lines)
 
+(autoload 'visual-basic-mode "visual-basic-mode" "Visual Basic mode." t)
+;; Associate .vb files with visual-basic-mode
+(add-to-list 'auto-mode-alist '("\\.\\(vb\\|vbs\\)$" . visual-basic-mode))
 ;; (require 'sunrise)
 ;; (require 'sunrise-buttons)
 ;; (require 'sunrise-modeline)
@@ -189,21 +211,6 @@
 ;; (require 'sunrise-tree)
 ;; (require 'sunrise-w32)
 
-;;(add-hook 'prog-mode-hook 'linum-mode)
-;;(add-hook 'find-file-hook 'linum-mode)
-
-(global-display-line-numbers-mode 1)
-
-(defun my-turn-off-line-numbers ()
-  "Disable line numbering in the current buffer."
-  (display-line-numbers-mode -1))
-
-(setq gc-cons-threshold (* 511 1024 1024))
-(setq gc-cons-percentage 0.5)
-(run-with-idle-timer 5 t #'garbage-collect)
-(setq garbage-collection-messages t)
-
-(add-hook 'pdf-view-mode-hook #'my-turn-off-line-numbers)
 
 ;; copy by default to the other window (dired)
 (setq dired-dwim-target t)
@@ -230,14 +237,6 @@
   (interactive)
   (set-buffer-file-coding-system 'unix 't) )
 
-;;(defun dos2unix2-m (buffer)
-;;      "Automate M-% C-q C-m RET C-q C-j RET / use if ^/M can be seen"
-;;      (interactive "*b")
-;;      (save-excursion
-;;        (goto-char (point-min))
-;;        (while (search-forward (string ?\C-m) nil t)
-;;          (replace-match (string ?\C-j) nil t))))
-
 ;; clean buffer list        
 (require 'midnight)
 (midnight-delay-set 'midnight-delay "4:30am")
@@ -259,10 +258,13 @@
 (setq org-log-done t)
 
 ;; kwustoss mode
-(require 'kwu-mode)
-(add-to-list 'auto-mode-alist '("\\TAPE60\\'" . kwu-mode))
+(require 'kwu2-mode)
+(add-to-list 'auto-mode-alist '("\\TAPE60\\'" . kwu2-mode))
+
 (require 'kwu5-mode)
 (add-to-list 'auto-mode-alist '("\\tape1\\'" . kwu5-mode))
+
+(require 'kwutape8-transient)
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
@@ -301,7 +303,6 @@
 (setq evil-emacs-state-modes (delq 'ibuffer-mode evil-emacs-state-modes))
 
 ;; compress all marked files
-;(defun my-compress-folder ()
 (defun my-compress-folder ()
   "Compress the marked folder(s) using 7zip."
   (interactive)
@@ -314,7 +315,19 @@
           (async-shell-command command "*7zip-output*"))
       (message "No folder selected"))))
     
-(define-key dired-mode-map (kbd "C-c C-z") 'my-compress-folder)
+(define-key dired-mode-map (kbd "C-c z") 'my-compress-folder)
+    
+(defun extract-7z-archive (archive)
+  "Extract ARCHIVE using 7z to a folder with the same name."
+  (interactive "fSelect archive: ")
+  (let* ((archive-path (expand-file-name archive))
+         (archive-dir (file-name-sans-extension archive-path)))
+    (unless (file-directory-p archive-dir)
+      (make-directory archive-dir t))
+    (let ((command (format "7z x \"%s\" -o\"%s\"" archive-path archive-dir)))
+      (async-shell-command command))))
+
+(global-set-key (kbd "C-c e") 'extract-7z-archive)
 
 ;; disable scrollbar also for client
 (defun my/disable-scroll-bars (frame)
@@ -407,78 +420,14 @@
 ;;(require 'org-bullets)
 ;;(add-hook 'org-mode-hook (lambda () (org-bullets-mode 1)))
 
-;; python setup
-;; -----------------------------------------------
-
-;; setup for python mode
-;; ********************************************
-;; fix a bug in emacs 25 and python https://github.com/syl20bnr/spacemacs/issues/8797
-(setq python-shell-completion-native-enable nil)
-
-;; allows use of name == main with python-mode
-(require 'python)
-(define-key python-mode-map (kbd "C-c C-c")
-  (lambda () (interactive) (python-shell-send-buffer t)))
-
-;; help python inferior mode to scroll
-;; (add-hook 'inferior-python-mode-hook
-;;           (lambda ()
-;;             (setq comint-move-point-for-output t)
-;;             (setq indent-tabs-mode nil)
-;;             (infer-indentation-style)))
-
-(use-package pyvenv
-  :ensure t
-  :config
-  (pyvenv-activate "C:/Users/bdulauroy/AppData/Roaming/Anaconda3/envs/python3.8/")
-  (pyvenv-mode 1))
-
-(defun r-activate ()
-  (interactive)
-  (pyvenv-activate "C:/Users/bdulauroy/AppData/Roaming/Anaconda3/envs/r_env/"))
-
-(global-set-key (kbd "C-c C-r") 'r-activate)
-
-;; https://www.joseferben.com/posts/switching_from_elpy_to_anaconda_mode/
-;; ********************************************
-
-;; (use-package python-black
-;;   :ensure t
-;;   :bind (("C-c b" . python-black-buffer)))
-
-;; (use-package anaconda-mode
-;;   :ensure t
-;;   :bind (("C-c C-x" . next-error))
-;;   :config
-;;   (require 'pyvenv)
-;;   (add-hook 'python-mode-hook 'anaconda-mode))
-
-;; (use-package company-anaconda
-;;   :ensure t
-;;   :config
-;;   (eval-after-load "company"
-;;    '(add-to-list 'company-backends '(company-anaconda :with company-capf))))
-
-;; (use-package highlight-indent-guides
-;;   :ensure t
-;;   :config
-;;   (add-hook 'python-mode-hook 'highlight-indent-guides-mode)
-;;   (setq highlight-indent-guides-method 'character))
-
-;; (use-package flycheck
-;;   :ensure t
-;;   :init (global-flycheck-mode))
-;; *******************
-
-;; elpy python ide
-;; (use-package elpy
-;;   :ensure t
-;;   :init
-;;   (elpy-enable))
-
-(add-to-list 'process-coding-system-alist '("python" . (utf-8 . utf-8)))
-(setq elpy-rpc-python-command "python")
-;; -----------------------------------------------
+(use-package python
+  :ensure nil
+  :hook ((python-mode . (lambda ()
+                          (setq-local python-shell-dedicated 'project))))
+  :bind (:map python-mode-map
+              ("C-c C-b" . python-shell-send-buffer)
+              ("C-c C-r" . python-shell-send-region)
+              ("C-c C-f" . python-shell-send-defun)))
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
@@ -487,10 +436,10 @@
  ;; If there is more than one, they won't work right.
  '(bmkp-last-as-first-bookmark-file "c:/Users/bdulauroy/AppData/Roaming/.emacs.d/bookmarks")
  '(custom-safe-themes
-   '("78e6be576f4a526d212d5f9a8798e5706990216e9be10174e3f3b015b8662e27" default))
+        '("78e6be576f4a526d212d5f9a8798e5706990216e9be10174e3f3b015b8662e27" default))
  '(org-agenda-files '("c:/Users/bdulauroy/work.org"))
  '(package-selected-packages
-   '(org-bullets csv-mode anaconda-mode color-theme-sanityinc-tomorrow moe-theme modus-themes doom-themes solarized-theme leuven-theme anti-zenburn-theme twilight-bright-theme zenburn-theme melancholy-theme which-key keepass-mode jupyter gnuplot-mode dir-treeview beacon elpygen modus-operandi-theme highlight pdf-tools focus dired-rainbow material-theme conda pyvenv-auto disk-usage gnuplot dired-rsync popup-kill-ring elpy latex-preview-pane helm-swoop dired-hacks-utils evil-ediff multi use-package projectile rainbow-delimiters rainbow-mode vdiff ## sunrise-x-tabs sunrise-x-modeline sunrise-x-buttons spacemacs-theme rpn-calc powerline openwith neotree multiple-cursors monokai-pro-theme minimap magit indent-guide hydra helm gruvbox-theme evil ess dracula-theme company auto-complete auctex)))
+   '(apdl-mode go-mode org-bullets csv-mode anaconda-mode color-theme-sanityinc-tomorrow moe-theme modus-themes doom-themes solarized-theme leuven-theme anti-zenburn-theme twilight-bright-theme zenburn-theme melancholy-theme which-key keepass-mode jupyter gnuplot-mode dir-treeview beacon elpygen modus-operandi-theme highlight pdf-tools focus dired-rainbow material-theme conda pyvenv-auto disk-usage gnuplot dired-rsync popup-kill-ring elpy latex-preview-pane helm-swoop dired-hacks-utils evil-ediff multi use-package projectile rainbow-delimiters rainbow-mode vdiff ## sunrise-x-tabs sunrise-x-modeline sunrise-x-buttons spacemacs-theme rpn-calc powerline openwith neotree multiple-cursors monokai-pro-theme minimap magit indent-guide hydra helm gruvbox-theme evil ess dracula-theme company auto-complete auctex)))
 
 (require 'popup)
 (require 'pos-tip)
@@ -511,13 +460,6 @@
 
 ;; yes replaced by y, no by n
 (defalias 'yes-or-no-p 'y-or-n-p)
-
-;; This extension allows you to quickly mark the next occurence of a region and edit them all at once. Wow!
-;; (require 'mark-more-like-this)
-;; (global-set-key (kbd "C-c p") 'mark-previous-like-this)
-;; (global-set-key (kbd "C-c q") 'mark-next-like-this)
-;; (global-set-key (kbd "C-M-m") 'mark-more-like-this) ; like the other two, but takes an argument (negative is previous)
-;; (global-set-key (kbd "C-*") 'mark-all-like-this)
 
 ;;Every time emacs encounters a hexadecimal code that resembles a color, it will automatically highlight it in the appropriate color.
 (use-package rainbow-mode
@@ -541,7 +483,6 @@
 ;; disable python indetn warning
 (setq python-indent-guess-indent-offset-verbose nil)
 
-;; from chatGPT
 ;; yes, you can disable the prompt asking whether to use a new buffer or not when running a new async command with async-shell-command in Emacs. You can achieve this by customizing the variable async-shell-command-buffer to always use a new buffer.
 (setq async-shell-command-buffer 'new-buffer)
 
@@ -573,16 +514,26 @@ as input."
    (read-shell-command "Shell command on buffer: ")))
 (global-set-key (kbd "C-x C-t") 'shell-command-on-buffer)
 
-(defun cpm/show-and-copy-buffer-filename ()
-  "Show the full path to the current file in the minibuffer and copy to clipboard."
-  (interactive)
-  (let ((file-name (buffer-file-name)))
-    (if file-name
-        (progn
-          (message file-name)
-          (kill-new file-name))
-      (error "Buffer not visiting a file"))))
 
+(defun cpm/copy-buffer-file-name (&optional full)
+  "Copy the current buffer file name to the clipboard.
+
+With prefix argument FULL (C-u), copy the full absolute path.
+Without prefix, copy the abbreviated path (with ~)."
+  (interactive "P")
+  (let ((file (buffer-file-name)))
+    (unless file
+      (user-error "Current buffer is not visiting a file"))
+    (let* ((path (if full
+                     (expand-file-name file)
+                   (abbreviate-file-name file))))
+      (kill-new path)
+      (message "Copied: %s" path))))
+
+(global-set-key (kbd "C-c p f") #'cpm/copy-buffer-file-name)
+
+;(evil-set-initial-state 'sunrise-mode 'emacs)
+(evil-set-initial-state 'image-mode 'emacs)
 ;;(evil-set-initial-state 'ibuffer-mode 'normal)
 ;;(evil-set-initial-state 'bookmark-bmenu-mode 'normal)
 (evil-set-initial-state 'sunrise-mode 'emacs)
@@ -598,26 +549,7 @@ as input."
 (setq use-package-compute-statistics t)
 
 (add-hook 'shell-mode-hook 'ansi-color-for-comint-mode-on)
-(add-to-list 'exec-path "c:/Apps/ImageMagick")
-(add-to-list 'exec-path "C:/Program Files (x86)/Gnuplot/bin")
-(add-to-list 'exec-path "C:/Program Files/Gnuplot/bin")
-;;(add-to-list 'exec-path "C:/Users/benoi/anaconda3/Scripts")
-;; if not set in the environment variable on the system
-(setq shell-file-name explicit-shell-file-name)
-;; (add-to-list 'exec-path "C:/cygwin64/bin")
-(add-to-list 'exec-path "C:/Apps/emacs/libexec/emacs/27.1/x86_64-w64-mingw32")
-;;(add-to-list 'exec-path "C:/Apps/bin")
-(setenv "SHELL" "cmdproxy.exe")
 (setq using-unix-filesystems t)
-;(setq shell-file-name "cmdproxy")
-;(setq explicit-shell-file-name "cmdproxy.exe")
-;;(setq explicit-shell-file-name "bash.exe")
-(setq shell-command-switch "/C")
-(setq exec-path (append exec-path '("C:/Windows/System32/OpenSSH")))
-
-(setq shell-file-name "C:/Apps/emacs/libexec/emacs/27.1/x86_64-w64-mingw32/cmdproxy.exe")
-(setq explicit-shell-file-name shell-file-name)
-(setq explicit-sh-args '("--noediting" "--login" "-i"))
 
 (defun paste-windows-path (pth) (interactive "*sWindows path:") (insert (replace-regexp-in-string "\\\\" "\\\\\\\\" pth)))
 
@@ -675,10 +607,10 @@ as input."
   :init
   (add-hook 'prog-mode-hook #'rainbow-delimiters-mode))
 
-;; (use-package dmenu
+;; (use-package org-bullets
 ;;   :ensure t
-;;   :bind
-;;  ("S-SPC" . 'dmenu))
+;;   :config
+;;   (add-hook 'org-mode-hook (lambda () (org-bullets-mode))))
 
 (setq scroll-conservatively 100)
 
@@ -729,7 +661,7 @@ as input."
     (dired-rainbow-define markdown "#2f4a31" ("org" "etx" "info" "markdown" "md" "mkd" "nfo" "pod" "rst" "tex" "textfile" "txt"))
     (dired-rainbow-define database "#6574cd" ("xlsx" "xls" "csv" "accdb" "db" "mdb" "sqlite" "nc"))
     (dired-rainbow-define media "#de751f" ("mp3" "mp4" "MP3" "MP4" "avi" "mpeg" "mpg" "flv" "ogg" "mov" "mid" "midi" "wav" "aiff" "flac"))
-    (dired-rainbow-define image "#f66d9b" ("tiff" "tif" "cdr" "gif" "ico" "jpeg" "jpg" "png" "psd" "eps" "svg" "JPG"))
+    (dired-rainbow-define image "#f66d9b" ("tiff" "tif" "cdr" "gif" "ico" "jpeg" "jpg" "png" "psd" "eps" "svg" "JPG" "webp" "emf" "wmf"))
     (dired-rainbow-define log "#c17d11" ("log"))
     (dired-rainbow-define shell "#f6993f" ("awk" "bash" "bat" "sed" "sh" "zsh" "vim"))
     (dired-rainbow-define interpreted "#38c172" ("py" "ipynb" "rb" "pl" "t" "msql" "mysql" "pgsql" "sql" "r" "clj" "cljs" "scala" "js"))
@@ -747,9 +679,6 @@ as input."
     (dired-rainbow-define-chmod executable-unix "#38c172" "-.*x.*")
     )) 
 
-;;(require 'auto-package-update)
-;;(auto-package-update-maybe)
-
 (require 'ace-window)
 (global-set-key (kbd "M-o") 'ace-window)
 
@@ -766,7 +695,6 @@ as input."
 (set-face-foreground 'vertical-border "grey")
 
 ;; windows specific
-    
 
 ;; robocopy files
 ;; (defun my-dired-copy-to-other-window ()
@@ -848,29 +776,33 @@ as input."
     
 ;;(define-key dired-mode-map "Y" 'ora-dired-robocopy)
 
-(add-to-list 'default-frame-alist '(font . "Consolas 10"))
+(add-to-list 'default-frame-alist '(font . "Consolas 11"))
 
-;; (Setq dired-guess-shell-alist-user
-;;       '(("\\.pdf\\'" "inkscape ? &")
-;;         ("\\.emf\\'" "inkscape ? &")
-;;         ("\\.pdf\\'" "gsview ? &")
-;;         ("\\.mp3\\'" "vlc ? &")
-;;         ("\\.mp4\\'" "ffplay ? &")
-;;         ("\\.mkv\\'" "ffplay ? &")
-;;         ("\\.avi\\'" "ffplay ? &")
-;;         ("\\.png\\'" "gimp ? &")
-;;         ("\\.jpg\\'" "gimp ? &")
-;;         ("\\.JPG\\'" "gimp ? &")
-;;         ("\\.plt\\'" "gnuplot ? &")
-;;         ("\\.dem\\'" "gnuplot ? &")
-;;         ("\\.gp\\'" "gnuplot ? &")
-;;         ("\\.svg\\'" "inkscape ? &")
-;;         ("\\.eps\\'" "inkscape ? &")
-;;         ("\\.zip\\'" "C:/Program Files/7-zip/7zfm.exe ? &")
-;;         ("\\.ps\\'" "inkscape ? &")
-;;         ))
-
-;; (add-to-list 'Info-default-directory-list "c:/Program Files (X86)/gnuplot/bin/gnuplot.exe")
+(setq dired-guess-shell-alist-user
+      '(("\\.pdf\\'" "inkscape ? &" "gsview ? &" "acrobat ? &" "gimp ? &" "inkview ? &")
+        ("\\.eps\\'" "inkscape ? &" "gsview ? &" "inkview ? &")
+        ("\\.emf\\'" "inkscape ? &" "inkview ? &")
+        ("\\.svg\\'" "inkscape ? &" "inkview ? &" "code ? &")
+        ("\\.ps\\'" "inkscape ? &" "inkview ? &")
+        ("\\.mp3\\'" "vlc ? &" "ffplay ? &")
+        ("\\.mp4\\'" "vlc ? &" "ffplay ? &")
+        ("\\.mkv\\'" "vlc ? &" "ffplay ? &")
+        ("\\.avi\\'" "vlc ? &" "ffplay ? &")
+        ("\\.png\\'" "gimp ? &")
+        ("\\.jpg\\'" "gimp ? &")
+        ("\\.JPG\\'" "gimp ? &")
+        ("\\.plt\\'" "gnuplot ? &")
+        ("\\.dem\\'" "gnuplot ? &")
+        ("\\.gp\\'" "gnuplot ? &")
+        ("\\.csv\\'" "notepad++ ? &" "gvim ? &")
+        ("\\.dat\\'" "notepad++ ? &" "gvim ? &")
+        ("\\.txt\\'" "notepad++ ? &" "gvim ? &")
+        ("\\.zip\\'" "7zfm.exe ? &")
+        ("\\.rar\\'" "7zfm.exe ? &")
+        ("\\.tar\\'" "7zfm.exe ? &")
+        ("\\.tar.xz\\'" "7zfm.exe ? &")
+        ("\\.gz\\'" "7zfm.exe ? &")
+        ("\\.tar.gz\\'" "7zfm.exe ? &")))
 
 (defun dired-open-with-choice ()
   "Prompt for a program to open the current file in `dired` with a default choice and display all options."
@@ -879,28 +811,31 @@ as input."
          (file-url (concat "file:///" (replace-regexp-in-string "\\\\" "/" file))) ;; Convert path to VLC format
          (choices (cond
                    ((string-match "\\.pdf\\'" file) 
-                    '("C:/PortableApps/SumatraPDF/SumatraPDF.exe"
-                      "C:/PortableApps/Inkscape/bin/inkscape.exe"
-                      "C:/Program Files/Tracker Software/PDF Editor/PDFXEdit.exe"
-                      "C:/Program Files/Adobe/Acrobat DC/Acrobat/Acrobat.exe"
-                      "C:/Program Files/Inkscape/inkscape.exe"
-                      "C:/Program Files/Artifex Software/gsview6.0/bin/gsview.exe"
-                      "C:/Program Files (x86)/Adobe/Acrobat DC/Acrobat/Acrobat.exe"))
+                    '("inkscape"
+                      "inkview"
+                      "gimp"                      
+                      "gsview"
+                      "Acrobat"))
+                   ((string-match "\\.\\(dat\\|txt\\|nfo\\|f\\|f90\\)\\'" file) 
+                    '("notepad++"
+                      "gvim"
+                      "code"))
                    ((string-match "\\.\\(mp4\\|mkv\\|mpg\\|avi\\|m4v\\)\\'" file) 
-                    '("C:/Program Files/VideoLAN/VLC/vlc.exe"
-                      "C:/Apps/ffmpeg/bin/ffplay.exe"))
+                    '("vlc"
+                      "ffplay"))
                    ((string-match "\\.\\(ps\\|eps\\)\\'" file) 
-                    '("C:/Program Files/Inkscape/inkscape.exe"
-                      "C:/Program Files/Artifex Software/gsview6.0/bin/gsview.exe"))
+                    '("inkscape"
+                      "inkview"
+                      "gsview"))
                    ((string-match "\\.\\(png\\|jpg\\|jpeg\\|bmp\\|gif\\|tif\\)\\'" file) 
-                    '("C:/Apps/ffmpeg/bin/ffplay.exe"
-                      "C:/Program Files/GIMP 2/bin/gimp-2.10.exe"))
+                    '("ffplay"
+                      "gimp-3"))
                    ((string-match "\\.\\(svg\\|emf\\|wmf\\)\\'" file) 
-                    '("C:/Program Files/Inkscape/inkscape.exe"))
+                    '("inkscape"))
                    ((string-match "\\.\\(plt\\|gp\\|dem\\)\\'" file) 
-                    '("C:/Program Files/gnuplot/bin/gnuplot.exe"))
+                    '("gnuplot"))
                    ((string-match "\\.\\(zip\\|7z\\|rar\\|tar.xz\\|tar.gz\\|.gz\\|.tar\\)\\'" file) 
-                    '("C:/Program Files/7-Zip/7zFM.exe"))
+                    '("7zFM"))
                    (t nil)))
          (default-program (car choices))
          (program (if choices
@@ -912,20 +847,17 @@ as input."
     
     (when program
       (cond
-       ((string-match "ffplay.exe" program)
+       ((string-match "ffplay" program)
         (call-process-shell-command (concat "\"" program "\" " (shell-quote-argument file)) nil 0))
 
        ((string-match "vlc.exe" program)
-        (call-process-shell-command (concat "\"" program "\" " file-url) nil 0))
+        (call-process-shell-command (concat "\"" program "\"fff " file-url) nil 0))
 
        ;; Default behavior for other programs
        (t (start-process "dired-open" nil program file))))))
     
-(define-key dired-mode-map (kbd "!") 'dired-open-with-choice)
+(define-key dired-mode-map (kbd "C-c o") 'dired-open-with-choice)
 
-
-
-   
 ;; Set Frame width/height (can be set in ~/.Xdefaults too) size depends if ETX or others
 (setq default-frame-alist
       '((top . 40) (left . 225) (width . 200) (height . 55)))
@@ -957,223 +889,57 @@ as input."
 
 (define-key dired-mode-map (kbd "0 q") 'copy-directory-path)
 
-;; remote to local with curl not working in richland but may work from home
-;; (defun copy-remote-to-local ()
-;;   (interactive)
-;;   (let* ((remote-file (dired-get-filename))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
-;;          (local-file (concat local-dir (file-name-nondirectory remote-path)))
-;;          (curl-command (concat "curl --insecure --user " remote-user " -o " local-file " \"sftp://" remote-host "/" remote-path "\"")))
-;;     (message curl-command)
-;;     (async-shell-command curl-command)))
-
-;; (defun copy-remote-to-local ()
-;;   (interactive)
-;;   (let* ((remote-file (dired-get-filename))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
-;;          (local-file (concat local-dir (file-name-nondirectory remote-path))))
-;;     (select-window (next-window)) ; Switch to the Tramp window
-;;     (async-shell-command (concat "pscp.exe " remote-user "@" remote-host ":" remote-path " " local-file))
-;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
-
+;; works with single file, no space
 ;; (defun copy-local-to-remote ()
 ;;   (interactive)
-;;   (let* ((local-file (dired-get-filename))
-;;          (remote-buffer (window-buffer (next-window)))
-;;          (remote-dir (with-current-buffer remote-buffer default-directory))
-;;          (remote-file (concat remote-dir (file-name-nondirectory local-file)))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory))))
-;;     ;;(select-window (next-window)) ; Switch to the Tramp window
-;;     (async-shell-command (concat "pscp.exe " local-file " " remote-user "@" remote-host ":" remote-path))
-;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
 
-;; (defun copy-local-to-remote ()
-;;   (interactive)
-;;   (let* ((local-file (dired-get-filename))
-;;          (remote-buffer (window-buffer (next-window)))
-;;          (remote-dir (with-current-buffer remote-buffer default-directory))
-;;          (remote-file (concat remote-dir (file-name-nondirectory local-file)))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory))))
-;;     ;;(select-window (next-window)) ; Switch to the Tramp window
-;;     (async-shell-command (concat "pscp.exe " local-file " " remote-user "@" remote-host ":" remote-path))
-;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
-    
-;; (defun copy-remote-to-local ()
-;;   (interactive)
-;;   (let* ((remote-file (dired-get-filename))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
-;;          (local-file (concat local-dir (file-name-nondirectory remote-path))))
-;;     (select-window (next-window)) ; Switch to the Tramp window
-;;     (async-shell-command (concat "pscp.exe -r " remote-user "@" remote-host ":" remote-path " " local-file))
-;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
-
-
-;; (defun copy-remote-to-local ()
-;;   (interactive)
-;;   (let* ((remote-file (dired-get-filename))
-;;          (is-directory (file-directory-p remote-file))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          ;; Generate a unique buffer name
-;;          (buffer-name (generate-new-buffer-name
-;;                        (format "*Copy Remote to Local: %s@%s:%s to %s*"
-;;                                remote-user
-;;                                remote-host
-;;                                (file-name-nondirectory remote-path)
-;;                                (dired-current-directory)))))
-;;     (async-shell-command (concat "pscp.exe "
-;;                                  (if is-directory "-r ")
-;;                                  remote-user "@" remote-host ":"
-;;                                  remote-path " "
-;;                                  (if is-directory
-;;                                      (dired-current-directory)
-;;                                    (concat (dired-current-directory) (file-name-nondirectory remote-path))))
-;;                          buffer-name)
-;;     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
-
-;; (defun copy-remote-to-local ()
-;;   (interactive)
-;;   (let* ((remote-file (dired-get-filename))
-;;          (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;          (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;          (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;          (local-buffer (window-buffer (next-window)))
-;;          (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
-;;          (local-file (concat local-dir (file-name-nondirectory remote-path)))
-;;          (buffer-name (generate-new-buffer-name
-;;                        (format "*Copy Remote to Local: %s@%s:%s to %s*"
-;;                                remote-user
-;;                                remote-host
-;;                                (file-name-nondirectory remote-path)
-;;                                (file-name-nondirectory local-file)))))
-;;     (select-window (next-window)) ; Switch to the Tramp window
-;;     (async-shell-command (concat "pscp.exe -r "
-;;                                  remote-user "@" remote-host ":"
-;;                                  remote-path " " local-file)
-;;                          buffer-name)  ; Use the generated unique buffer name
-;;     (select-window (get-buffer-window local-buffer))  ; Switch back to the local window
-;;     (pop-to-buffer buffer-name)))  ; Display the new buffer
-
-
-;; (defun copy-local-to-remote ()
-;; (interactive)
-;; (let* ((local-file (dired-get-filename))
-;;         (is-directory (file-directory-p local-file))
-;;         (remote-buffer (window-buffer (next-window)))
-;;         (remote-dir (with-current-buffer remote-buffer default-directory))
-;;         (remote-file (if is-directory
-;;                         remote-dir
-;;                     (concat remote-dir (file-name-nondirectory local-file))))
-;;         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-;;         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-;;         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-;;         (local-buffer (window-buffer (next-window)))
-;;         ;; Generate a unique buffer name
-;;         (buffer-name (generate-new-buffer-name
-;;                     (format "*Copy Local to Remote: %s to %s@%s:%s*"
-;;                             (file-name-nondirectory local-file)
-;;                             remote-user
-;;                             remote-host
-;;                             (file-name-nondirectory remote-path)))))
-;; (async-shell-command (concat "pscp.exe "
-;;                                 (if is-directory "-r ")
-;;                                 local-file " "
-;;                                 remote-user "@" remote-host ":"
-;;                                 remote-path)
-;;                         buffer-name)
-;; (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
-   
-;; (defun copy-file-remote-or-local ()
-;;   "Copy selected file between remote and local and update Dired buffer."
-;;   (interactive)
-;;   (let* ((current-file (dired-get-filename)))
-;;     (if (file-remote-p current-file)
-;;         (progn
-;;           (copy-remote-to-local)
-;;           (dired-revert))
-;;       (progn
-;;         (copy-local-to-remote)
-;;         (dired-revert)))))
-
-;; (global-set-key (kbd "C-x c") 'copy-file-remote-or-local)
+;; works with several files and spaces
 (defun copy-local-to-remote ()
+  "Copy all selected local files to a remote Tramp session."
   (interactive)
-  (let* ((local-file (dired-get-filename))
-         (is-directory (file-directory-p local-file))
-         (remote-buffer (window-buffer (or (window-next-sibling) (error "No next window available"))))
+  (let* ((local-files (dired-get-marked-files))
+         (remote-buffer (window-buffer (next-window)))
          (remote-dir (with-current-buffer remote-buffer default-directory))
-         (remote-file (if is-directory
-                          remote-dir
-                        (concat remote-dir (file-name-nondirectory local-file))))
-         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-         (local-buffer (current-buffer))
-         ;; Generate a unique buffer name
-         (buffer-name (generate-new-buffer-name
-                       (format "*Copy Local to Remote: %s to %s@%s:%s*"
-                               (file-name-nondirectory local-file)
-                               remote-user
-                               remote-host
-                               (file-name-nondirectory remote-path)))))
-    (async-shell-command (concat "pscp.exe "
-                                 (if is-directory "-r ")
-                                 local-file " "
-                                 remote-user "@" remote-host ":"
-                                 remote-path)
-                         buffer-name)
+         (tramp-info (tramp-dissect-file-name remote-dir))
+         (remote-host (tramp-file-name-host tramp-info))
+         (remote-user (tramp-file-name-user tramp-info)))
+    (dolist (local-file local-files)
+      (let* ((remote-file (concat (tramp-file-name-localname tramp-info)
+                                  (file-name-nondirectory local-file))))
+        (async-shell-command
+         (format "pscp.exe \"%s\" %s@%s:\"%s\""
+                 (expand-file-name local-file) remote-user remote-host remote-file))))))
+
+;; works with several files and spaces
+(defun copy-remote-to-local ()
+  "Copy all selected remote files to the local system using `pscp.exe`."
+  (interactive)
+  (let* ((remote-files (dired-get-marked-files))
+         (local-buffer (window-buffer (next-window)))
+         (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory))))
+    
+    (select-window (next-window)) ; Switch to the Tramp window
+    
+    ;; Process each file separately to avoid pscp limitations
+    (dolist (remote-file remote-files)
+      (let* ((tramp-info (tramp-dissect-file-name remote-file))
+             (remote-host (tramp-file-name-host tramp-info))
+             (remote-user (tramp-file-name-user tramp-info))
+             (remote-path (tramp-file-name-localname tramp-info))
+             (local-file (concat local-dir (file-name-nondirectory remote-path))))
+        (async-shell-command
+         (format "pscp.exe -r \"%s@%s:%s\" \"%s\""
+                 remote-user remote-host remote-path local-file))))
+    
     (select-window (get-buffer-window local-buffer)))) ; Switch back to the local window
 
-(defun copy-remote-to-local ()
-  (interactive)
-  (let* ((remote-file (dired-get-filename))
-         (remote-host (tramp-file-name-host (tramp-dissect-file-name remote-file)))
-         (remote-user (tramp-file-name-user (tramp-dissect-file-name remote-file)))
-         (remote-path (tramp-file-name-localname (tramp-dissect-file-name remote-file)))
-         (local-buffer (window-buffer (next-window)))
-         (local-dir (file-name-as-directory (with-current-buffer local-buffer default-directory)))
-         (local-file (concat local-dir (file-name-nondirectory remote-path)))
-         (buffer-name (generate-new-buffer-name
-                       (format "*Copy Remote to Local: %s@%s:%s to %s*"
-                               remote-user
-                               remote-host
-                               (file-name-nondirectory remote-path)
-                               (file-name-nondirectory local-file)))))
-    (select-window (next-window)) ; Switch to the Tramp window
-    (async-shell-command (concat "pscp.exe -r "
-                                 remote-user "@" remote-host ":"
-                                 remote-path " " local-file)
-                         buffer-name)  ; Use the generated unique buffer name
-    (select-window (get-buffer-window local-buffer))  ; Switch back to the local window
-    (pop-to-buffer buffer-name)))  ; Display the new buffer
+(global-set-key (kbd "C-x c") 'copy-file-remote-or-local)
 
-(defun copy-file-remote-or-local ()
-  "Copy selected file between remote and local and update Dired buffer."
+(defun copy-files-remote-or-local ()
+  "Copy selected files between remote and local and update Dired buffer."
   (interactive)
-  (let* ((current-file (dired-get-filename)))
-    (if (file-remote-p current-file)
+  (let* ((current-files (dired-get-marked-files)))
+    (if (file-remote-p (car current-files))  ;; Check the first file for remote status
         (progn
           (copy-remote-to-local)
           (dired-revert))
@@ -1181,7 +947,7 @@ as input."
         (copy-local-to-remote)
         (dired-revert)))))
 
-(global-set-key (kbd "C-x c") 'copy-file-remote-or-local)
+(global-set-key (kbd "C-x c") 'copy-files-remote-or-local)
 
 ;; insure the shell is opened in the current frame
 (setq shell-pop-full-span t)
@@ -1225,25 +991,93 @@ as input."
 
 (add-hook 'emacs-startup-hook #'my/open-dired-at-startup)
 
-(defun create-script-with-shebang (file-name)
-  "Create a new script file with a specified shebang line and open in Emacs."
+(defun create-script-with-shebang-and-gnuplot (file-name)
+  "Create a new script file with a specified shebang line and open in Emacs.
+   Include a sample Gnuplot script in the file."
   (interactive "sEnter script name: ")
   (let* ((file-path (expand-file-name file-name))
-         (language (completing-read "Choose shebang (Bash [b] | Python [p] | Gnuplot [g]): "
-                                    '(("b" "Bash") ("p" "Python"))))
+         (language (completing-read "Choose shebang (Bash [b] | Python [p] | PBS [s] | Gnuplot [g] | R [r] | Texte [t]): "
+                                    '(("b" "Bash") ("p" "Python") ("s" "PBS") ("g" "Gnuplot") ("r" "R") ("t" "Texte")  )))
          (shebang-line (cond ((string= language "b") "#!/bin/bash")
                              ((string= language "p") "#!/usr/bin/env python")
+                             ((string= language "s") "#!/bin/bash\n#PBS -l nodes=1:ppn=2\n#PBS -q normal\n#PBS -N processing")
                              ((string= language "g") "#!/usr/bin/env gnuplot")
-                             (t ""))))
+                             ((string= language "R") "#!/usr/bin/env Rscript")
+                             ((string= language "t") "") ; no shebang for .txt
+                             (t (format "#!/usr/bin/env %s" language))))
+         (gnuplot-content (if (string= language "g")
+                              (concat "
+set xtics font \",13\" 
+set ytics font \",13\"
+set term svg
+set xlabel 'x []' font \",13\" tc rgb '#606060'
+set ylabel 'y []' font \",13\" tc rgb '#606060'
+# set xrange [0:100]
+# set yrange [0:100]
+# set ylabel 'PSD [g^2/Hz]' font \"Nimbus,12\" tc rgb '#606060' offset -1.2,0
+# set key opaque
+# set grid back ls 12
+# set grid ytics lc rgb '#C0C0C0'
+# set lmargin 14
+
+set style line 13 lt 1 pt 7 lc rgb '#0072bd' # blue
+set style line 14 lt 1 pt 7 lc rgb '#d95319' # orange
+set style line 15 lt 1 pt 7 lc rgb '#edb120' # yellow
+set style line 16 lt 1 pt 7 lc rgb '#7e2f8e' # purple
+set style line 17 lt 1 pt 7 lc rgb '#77ac30' # green
+set style line 18 lt 1 pt 7 lc rgb '#4dbeee' # light-blue
+set style line 19 lt 1 pt 7 lc rgb '#c06c84' # pink
+set style line 20 lt 1 pt 7 lc rgb '#7f4e34' # brown
+set style line 21 lt 1 pt 7 lc rgb '#606060' # grey
+
+set output \"my_output.svg\"
+set title 'my_title' font \",13\" tc rgb '#606060'
+plot 'data1.dat' using 1:2  w l ls 13 lw 2 title 'MSR',\\
+'data2.dat' using 1:2  w l ls 14 lw 2 title 'HBM: CH1'
+    
+materials = \"Sorbothane Rubber Neoprene EPDM Super8 'Water Resistant Sorbothane'\" 
+directories = \"01_Test_2023-10-16 02_Test_2023-10-18 03_Test_2023-10-20 04_Test_2023-10-23 05_Test_2023-10-24 06_Test_2023-10-24\" 
+ch = \"CH1 CH2 CH3 CH4 CH5 CH6\"
+
+do for [i=1:words(ch)] {
+    set output sprintf(\"CH%d.svg\", i)
+    name =  sprintf(\"CH_%d\", i)
+    plot for [j=1:words(materials)] sprintf('./%s/dat/%s.dat', word(directories, j), name) using 1:($2/in**2) w l ls j+12 lw 2 title sprintf(\"%s\",word(materials,j))
+}
+")
+                            ""))
+         (script-content (concat shebang-line "\n" gnuplot-content)))
     (if (file-exists-p file-path)
         (message "File already exists!")
       (with-temp-file file-path
-        (insert shebang-line "\n"))
+        (insert script-content))
+      (shell-command (format "chmod +x %s" file-path)) ; Set executable permissions
       (find-file file-path)
-      (message "Script %s created with shebang line: %s" file-name shebang-line))))
+      (message "Script %s created with shebang line:\n%s\nand sample content."
+               file-name shebang-line))))
 
-(global-set-key (kbd "C-c j") 'create-script-with-shebang)
+(global-set-key (kbd "C-c j") 'create-script-with-shebang-and-gnuplot)
 
+(defun copy-directory-path ()
+  "Copy the path of the current directory in Dired mode to the clipboard."
+  (interactive)
+  (let ((dir (dired-current-directory)))
+    (kill-new (expand-file-name dir))
+    (message "Directory path copied to clipboard: %s" dir)))
+
+(define-key dired-mode-map (kbd "0 q") 'copy-directory-path)
+
+(defun dired-copy-full-path-to-clipboard ()
+  "Copy the full path of the selected file in Dired to the clipboard."
+  (interactive)
+  (let ((file-path (dired-get-file-for-visit)))
+    (if file-path
+        (progn
+          (kill-new (file-truename file-path))
+          (message "Full path copied to clipboard: %s" (file-truename file-path)))
+      (message "No file selected in Dired."))))
+
+(define-key dired-mode-map (kbd "0 w") 'dired-copy-full-path-to-clipboard)
 
 (defun eplot (files gnuplot-filename xlabel ylabel title y-column skip-lines)
   "Run a Gnuplot script with specified parameters for multiple files."
@@ -1336,6 +1170,30 @@ replot
 
 (global-set-key (kbd "C-c C-g") 'eplot)
 
+(defun plot-parquet-files ()
+  "Plot selected parquet.gzip files in Dired using Python and matplotlib."
+  (interactive)
+  (let* ((files (dired-get-marked-files)) ;; Get marked files
+         (python-script-path "./plot_parquet_files.py") ;; Temporary Python script path
+         (python-code (concat
+                       "import pandas as pd\n"
+                       "import matplotlib.pyplot as plt\n"
+                       ;; Read all selected .parquet.gzip files into pandas DataFrames
+                       "dfs = [pd.read_parquet('" (mapconcat #'identity files "', engine='pyarrow')\n       pd.read_parquet('") "', engine='pyarrow')]\n"
+                       "df = pd.concat(dfs)\n" ;; Concatenate all DataFrames
+                       "df.set_index(df.columns[0], inplace=True)\n"
+                       "df.plot()\n" ;; Plot the combined DataFrame
+                       "plt.show()\n")) ;; Show the plot
+         ;; Command to run the Python script asynchronously
+         (cmd (format "python %s" python-script-path)))
+    ;; Write the Python code to the script file
+    (with-temp-file python-script-path
+      (insert python-code))
+    ;; Execute the Python script asynchronously
+    (async-shell-command cmd "*Async Python Plot*")))
+
+(define-key dired-mode-map (kbd "C-c p") 'plot-parquet-files)
+
 (evil-define-key 'normal dired-mode-map
   "gg" 'beginning-of-buffer
   "G" 'end-of-buffer
@@ -1351,15 +1209,15 @@ replot
 
 ;; Custom function to resize window left
 (defun my-shrink-window-horizontally ()
-  "Shrink the window horizontally by 10 steps."
+  "Shrink the window horizontally by 20 steps."
   (interactive)
-  (shrink-window-horizontally 10))
+  (shrink-window-horizontally 20))
 
 ;; Custom function to resize window right
 (defun my-enlarge-window-horizontally ()
   "Enlarge the window horizontally by 10 steps."
   (interactive)
-  (enlarge-window-horizontally 10))
+  (enlarge-window-horizontally 20))
 
 ;; Rebind C-x { and C-x } to use the new functions
 (global-set-key (kbd "C-x {") 'my-shrink-window-horizontally)
@@ -1388,27 +1246,6 @@ replot
 
 ;; (defun dired-send-to-remote ()
 ;;   "Send the selected file or folder to a remote Linux directory using `pscp.exe`.
-;; First, choose a root destination:
-;; 1. `/urrnfs01/bdulauro/` (default: Home)
-;; 2. `/TEMP/bdulauro/`
-;; Then, optionally enter a subdirectory."
-;;   (interactive)
-;;   (let* ((pscp-path "C:/Program Files (x86)/PuTTY/pscp.exe") ;; Adjust if needed
-;;          (file (dired-get-file-for-visit))  ;; Get selected file or folder
-;;          (file-name (file-name-nondirectory file)) ;; Extract filename
-;;          (roots '(("Home" . "bdulauro@ausrichhpci03:/urrnfs01/bdulauro/")
-;;                   ("TEMP" . "bdulauro@ausrichhpci03:/TEMP/bdulauro/")))
-;;          (root-choice (assoc (completing-read "Select destination root: " (mapcar #'car roots) 
-;;                                               nil t "Home") roots)) ;; Pre-filled "Home" as default
-;;          (default-dest (cdr root-choice))
-;;          (subdir (read-string (format "Subdirectory (default: %s): " default-dest) "")) ;; Optional subdir
-;;          (destination (concat default-dest (if (string-empty-p subdir) "" (concat subdir "/")) file-name))
-;;          (pscp-command (format "\"%s\" \"%s\" \"%s\"" pscp-path file destination)))
-;;     (message "Running: %s" pscp-command)  ;; Debug message
-;;     (async-shell-command pscp-command)))  ;; Run command asynchronously
-
-;; ;; Assign shortcut key in Dired mode (e.g., "C-c s")
-;; (define-key dired-mode-map (kbd "C-c s") 'dired-send-to-remote)
 
 (defun dired-send-to-remote ()
   "Send selected files or folders to a remote Linux directory using `pscp.exe`.
@@ -1480,20 +1317,11 @@ If the current Dired buffer is remote (`psftp:`), it downloads files to the loca
 ;;(setq image-dired-dir "c:/Users/bdulauroy/emacs-thumbnails/")
 (setq image-dired-debug t)
 
-(defun my-image-dired-create-thumb (original-file thumbnail-file)
-  "Custom version of `image-dired-create-thumb` for Windows using ffmpeg."
-  (let* ((corrected-thumb-file (concat (file-name-sans-extension thumbnail-file) ".jpg"))
-         (cmd (concat "ffmpeg -i "
-                      (shell-quote-argument original-file)
-                      " -vf scale=128:128 "
-                      (shell-quote-argument corrected-thumb-file))))
-    (message "Running command: %s" cmd)  ;; Log the actual command
-    (shell-command cmd)
-    ;; Ensure Emacs knows the thumbnail is in JPG format
-    (rename-file corrected-thumb-file thumbnail-file t)))
 
-;; Override the built-in function
-(advice-add 'image-dired-create-thumb :override #'my-image-dired-create-thumb)
+(setq image-dired-thumb-size 256
+      image-dired-thumb-width 256
+      image-dired-thumb-height 256)
+
 
 (setq doc-view-ghostscript-program "C:/Program Files/gs/gs9.23/bin/gswin64c.exe")  ;; Use Ghostscript
 (setq doc-view-resolution 80)            ;; Lower resolution for faster loading
@@ -1508,25 +1336,628 @@ If the current Dired buffer is remote (`psftp:`), it downloads files to the loca
 
 (setq eshell-prompt-function
       (lambda ()
-        (concat (propertize "Î» " 'face '(:foreground "magenta" :bold t)))))
+        (concat (propertize "| " 'face '(:foreground "magenta" :bold t)))))
 
-(global-set-key (kbd "C-c l") 'display-line-numbers-mode)
-
-(defun preview-xls-as-csv ()
-  "Convert an XLS/XLSX file to CSV using Python and open it in Emacs."
+(defun my/display-disk-space ()
+  "Display free disk space using PowerShell."
   (interactive)
-  (let* ((xls-file (read-file-name "Select XLS/XLSX file: "))
-         (csv-file (concat (file-name-sans-extension xls-file) ".csv"))
-         (python-script "c:/Apps/bin/xls_to_csv.py")  ;; Change to your script path
-         (command (format "python3 '%s' '%s' '%s'" python-script xls-file csv-file)))
-    (if (file-exists-p python-script)
-        (progn
-          (shell-command command)
-          (if (file-exists-p csv-file)
-              (progn
-                (find-file csv-file)
-                (csv-mode))
-            (error "Failed to convert %s" xls-file)))
-      (error "Python conversion script not found!"))))
+  (let ((output (shell-command-to-string "powershell -command \"Get-PSDrive -PSProvider FileSystem\"")))
+    (with-output-to-temp-buffer "*Disk Space*"
+      (princ output))))
 
-(global-set-key (kbd "C-c v x") 'preview-xls-as-csv)
+(global-set-key (kbd "C-c C-d") 'my/display-disk-space)
+
+(message "%s" custom-enabled-themes)
+
+(defun compare-files-with-tool ()
+  (interactive)
+  (let* ((left-file (buffer-file-name (window-buffer (selected-window))))
+         (right-file (buffer-file-name (window-buffer (next-window))))
+         (tool (completing-read-default "Choose comparison tool: "
+                                        '("tkdiff" "examdiff")
+                                        nil t "tkdiff")))  ;; Force default UI
+    (if (and left-file right-file)
+        (shell-command (format "%s %s %s" tool left-file right-file))
+      (message "Please open two files for comparison first."))))
+
+(global-set-key (kbd "C-c C-t") 'compare-files-with-tool)
+
+(defun compare-files-with-gvim ()
+  "Compare two files in Emacs using gvim."
+  (interactive)
+  (let ((left-file (buffer-file-name (window-buffer (selected-window))))
+        (right-file (buffer-file-name (window-buffer (next-window))))
+        (gvim-command "gvim -d"))
+    (if (and left-file right-file)
+        (shell-command (format "%s %s %s" gvim-command left-file right-file))
+      (message "Please open two files for comparison first."))))
+
+(global-set-key (kbd "C-c C-v") 'compare-files-with-gvim)
+
+(defun dired-convert-svg-to-emf ()
+  "Convert selected .svg files in Dired to .emf using Inkscape with a process limit."
+  (interactive)
+  (let ((files (dired-get-marked-files))
+        (max-parallel 4))  ;; Adjust this number as needed
+    (while files
+      (let ((batch (seq-take files max-parallel)))  ;; Take a batch of `max-parallel` files
+        (setq files (seq-drop files max-parallel))  ;; Remove processed files from list
+        (dolist (file batch)
+          (let ((output-file (concat (file-name-sans-extension file) ".emf")))
+            (start-process "inkscape-convert" "*inkscape-output*" "inkscape" file "--export-type=emf" "--export-filename" output-file)))
+        (sleep-for 1)))  ;; Small delay to avoid overloading system
+    (message "All conversions completed!")))
+
+(define-key dired-mode-map (kbd "C-c C-e") 'dired-convert-svg-to-emf)
+
+(defun dired-open-inkview ()
+  "Open all selected SVG files in Inkview from Dired."
+  (interactive)
+  (let* ((files (dired-get-marked-files))
+         (svg-files (seq-filter (lambda (f) (string-match "\\.svg\\'" f)) files)))
+    (if svg-files
+        (apply #'start-process "inkview" nil "inkview" (mapcar #'convert-standard-filename svg-files))
+      (message "No SVG files selected."))))
+
+(define-key dired-mode-map (kbd "C-c d") 'dired-open-inkview)
+
+(define-key dired-mode-map (kbd "* .") 'dired-mark-extension)
+
+(defun my-dired-open-emf-as-png (file)
+  "Convert FILE (EMF) to PNG using Inkscape and open the PNG."
+  (let* ((png-file (concat (file-name-sans-extension file) ".png"))
+         (convert-cmd
+          (format "inkscape %S --export-type=png --export-filename=%S --export-area-drawing --export-dpi=150"
+                  file png-file)))
+    (unless (file-exists-p png-file)
+      (shell-command convert-cmd))
+    (if (file-exists-p png-file)
+        (find-file png-file)
+      (message "Conversion failed: %s" file))))
+
+(with-eval-after-load 'dired
+  (defun my/dired-ret ()
+    "RET in Dired: EMF -> convert/open, otherwise open normally."
+    (interactive)
+    (let* ((file (dired-get-file-for-visit))
+           (ext  (downcase (or (file-name-extension file) ""))))
+      (if (string= ext "emf")
+          (my-dired-open-emf-as-png file)
+        (dired-find-file))))
+
+  (evil-define-key 'normal dired-mode-map
+    (kbd "RET") #'my/dired-ret
+    (kbd "<return>") #'my/dired-ret))
+
+(defun text-preview-smart-dired ()
+  "Smart preview of delimited text files in Dired using pandas (Python 3.12+ compatible).
+Detects separator, finds where numeric data starts, shows 100 rows.
+Also opens the Python script in a buffer for inspection."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Text Preview*")
+         (script-buffer "*Text Preview Script*")
+         (script
+"import sys
+import pandas as pd
+import re
+
+filename = sys.argv[1]
+with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+    lines = f.readlines()
+
+sample = ''.join(lines[:20])
+candidate_separators = [',', ';', '\\t', '|']
+sep_scores = {}
+
+# Heuristic: consistent field count and low stddev suggests good separator
+for sep in candidate_separators:
+    pattern = re.escape(sep)
+    counts = [len(re.split(pattern, line.strip())) for line in lines[:20] if line.strip()]
+    if counts:
+        std = pd.Series(counts).std()
+        if std < 1.0 and max(counts) > 1:
+            sep_scores[sep] = sum(counts)
+
+if sep_scores:
+    sep = max(sep_scores, key=sep_scores.get)
+    engine = 'c'
+else:
+    sep = r'\\s+'
+    engine = 'python'
+
+def is_data_line(line):
+    tokens = re.split(sep, line.strip())
+    try:
+        floats = [float(t) for t in tokens if t.strip()]
+        return len(floats) >= 2
+    except:
+        return False
+
+start_row = 0
+for i, line in enumerate(lines[:20]):
+    if is_data_line(line):
+        start_row = i
+        break
+
+try:
+    df = pd.read_csv(filename, sep=sep, header=None, skiprows=start_row, nrows=100, engine=engine)
+    print(df.to_string(index=False))
+except Exception as e:
+    print(f'Error reading file: {e}')
+"))
+    ;; Show script for inspection/debugging
+    (with-current-buffer (get-buffer-create script-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert script)
+      (python-mode)
+      (read-only-mode 1))
+    ;; Run Python and show output
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code (call-process "python3" nil t nil "-c" script file)))
+        (if (= exit-code 0)
+            (progn
+              (goto-char (point-min))
+              (read-only-mode 1)
+              (display-buffer output-buffer))
+          (message "Failed to preview file."))))))
+
+(with-eval-after-load 'dired
+  (define-key dired-mode-map (kbd "C-c C-v") #'text-preview-smart-dired))
+
+(defvar autoplot-process nil
+  "The last Gnuplot process started by autoplot.")
+
+(defun autoplot-full (xcol ycols xlabel ylabel title terminal xrange-min xrange-max yrange-min yrange-max every-n)
+  "Full-featured Gnuplot plotting function."
+  (interactive
+   (list
+    (read-string "X column (default 1): " "1")
+    (read-string "Y column(s) (e.g. 2 or 6 7 8): " "2")
+    (read-string "X label: ")
+    (read-string "Y label: ")
+    (read-string "Title: ")
+    (completing-read "Terminal (qt, x11, png, svg, dumb): " '("qt" "x11" "png" "svg" "dumb") nil t "qt")
+    (read-string "X range min (Enter for auto): ")
+    (read-string "X range max (Enter for auto): ")
+    (read-string "Y range min (Enter for auto): ")
+    (read-string "Y range max (Enter for auto): ")
+    (read-string "Plot every N-th line (e.g. 10, default 1): " "1")))
+
+  (let* ((files (dired-get-marked-files))
+         (first-file (car files))
+         (basename (if (= (length files) 1)
+                       (file-name-base first-file)
+                     "multi_autoplot"))
+         (lines (with-temp-buffer
+                  (insert-file-contents first-file nil 0 1000)
+                  (split-string (buffer-string) "\n")))
+         (separator
+          (cond
+           ((string-match-p "," (car lines)) "','")
+           ((string-match-p ";" (car lines)) "';'")
+           ((string-match-p "\t" (car lines)) "'\t'")
+           (t "whitespace")))
+         (skip-lines
+          (number-to-string
+           (or (cl-position-if
+                (lambda (line)
+                  (let* ((clean (replace-regexp-in-string "[ \t]+" " " line))
+                         (parts (split-string clean))
+                         (nums (cl-remove-if-not #'string-to-number parts)))
+                    (>= (length nums) 2)))
+                lines :end 20)
+               0)))
+         (script-file (expand-file-name (concat basename ".plt")
+                                        (file-name-directory first-file)))
+         (plot-lines '())
+         (style-base 13)
+         (style-max 21)
+         (style-index 0))
+
+    ;; Build plot lines
+    (dolist (file files)
+      (let ((label-base (replace-regexp-in-string "_" "\\\\_" (file-name-base file))))
+        (dolist (ycol (split-string ycols))
+          (setq style-index (1+ style-index))
+          (let ((style-num (+ style-base (mod (1- style-index) (- style-max style-base +1)))))
+            (push (format "'%s' using %s:%s every %s::%s w l ls %d lw 2 title \"%s col %s\""
+                          (file-name-nondirectory file)
+                          xcol ycol every-n skip-lines
+                          style-num label-base ycol)
+                  plot-lines)))))
+
+    ;; Terminal setup
+    (let* ((term-line
+            (cond
+             ((string= terminal "qt") "set term qt\nset termoption noenhanced")
+             ((string= terminal "x11") "set term x11\nset termoption noenhanced")
+             ((string= terminal "png") "set term png size 1000,600\nset termoption noenhanced")
+             ((string= terminal "svg") "set term svg size 1000,600 font 'Arial,12'\nset termoption noenhanced")
+             ((string= terminal "dumb") "set term dumb 120 40")
+             (t "set term qt\nset termoption noenhanced")))
+           (output-line
+            (if (member terminal '("png" "svg"))
+                (format "set output '%s.%s'" basename terminal)
+              ""))
+           (xrange-line (unless (and (string= xrange-min "") (string= xrange-max ""))
+                          (format "set xrange [%s:%s]"
+                                  (if (string= xrange-min "") "*" xrange-min)
+                                  (if (string= xrange-max "") "*" xrange-max))))
+           (yrange-line (unless (and (string= yrange-min "") (string= yrange-max ""))
+                          (format "set yrange [%s:%s]"
+                                  (if (string= yrange-min "") "*" yrange-min)
+                                  (if (string= yrange-max "") "*" yrange-max))))
+           (pause-line (if (member terminal '("qt" "x11")) "pause -1" ""))
+           (script (format "
+set datafile separator %s
+%s
+%s
+
+# Base styles
+set style line 1 lc rgb '#377eb8' pt 7 ps 1 lt 1 lw 3
+set style line 2 lc rgb '#e41a1c' pt 7 ps 1 lt 1 lw 3
+set style line 11 lc rgb '#808080' lt 1
+set border 3 back ls 11
+set tics nomirror
+set style line 12 lc rgb '#808080' lt 0 lw 1
+set key top right font \",13\" tc rgb '#606060'
+set xtics font \",13\"
+set ytics font \",13\"
+
+# Color palette (13–21)
+set style line 13 lw 2 lt 1 pt 7 lc rgb '#0072bd'
+set style line 14 lw 2 lt 1 pt 7 lc rgb '#d95319'
+set style line 15 lw 2 lt 1 pt 7 lc rgb '#edb120'
+set style line 16 lw 2 lt 1 pt 7 lc rgb '#7e2f8e'
+set style line 17 lw 2 lt 1 pt 7 lc rgb '#77ac30'
+set style line 18 lw 2 lt 1 pt 7 lc rgb '#4dbeee'
+set style line 19 lw 2 lt 1 pt 7 lc rgb '#c06c84'
+set style line 20 lw 2 lt 1 pt 7 lc rgb '#7f4e34'
+set style line 21 lw 2 lt 1 pt 7 lc rgb '#606060'
+
+set xlabel '%s' font \",13\" tc rgb '#606060'
+set ylabel '%s' font \",13\" tc rgb '#606060'
+set title  '%s' font ',13' tc rgb '#606060'
+
+%s
+%s
+
+plot \\
+%s
+
+%s"
+                   separator term-line output-line
+                   xlabel ylabel title
+                   (or xrange-line "")
+                   (or yrange-line "")
+                   (mapconcat #'identity (reverse plot-lines) ",\\\n")
+                   pause-line)))
+
+      ;; Write and run
+      (with-temp-file script-file
+        (insert script))
+
+      (if (string= terminal "dumb")
+          (with-current-buffer (get-buffer-create "*autoplot*")
+            (erase-buffer)
+            (call-process "gnuplot" nil (current-buffer) nil script-file)
+            (display-buffer (current-buffer)))
+        (progn
+          (when (process-live-p autoplot-process)
+            (kill-process autoplot-process))
+          (setq autoplot-process
+                (start-process "autoplot-gnuplot" "*autoplot*" "gnuplot" script-file))
+          (message "Plotted %d curve(s) using terminal '%s'." style-index terminal))))))
+
+(defun autoplot-default ()
+  "Quick autoplot with default values (qt terminal)."
+  (interactive)
+  (autoplot-full "1" "2" "" "" "" "qt" "" "" "" "" "1"))
+
+(defun autoplot-dumb ()
+  "Quick autoplot with default values using dumb terminal (ASCII plot in buffer)."
+  (interactive)
+  (autoplot-full "1" "2" "" "" "" "dumb" "" "" "" "" "1"))
+
+(defun autoplot (&optional arg)
+  "Main autoplot command.
+Runs quick version by default, or full prompt if ARG is given (e.g. with C-u)."
+  (interactive "P")
+  (if arg
+      (call-interactively #'autoplot-full)
+    (autoplot-default)))
+
+(global-set-key (kbd "C-c C-p") #'autoplot)
+(global-set-key (kbd "C-c C-d") #'autoplot-dumb)
+
+(require 'tramp-term)
+
+(require 'go-mode)
+
+(defun lyncburg ()
+  "Open an Emacs shell and SSH with TTY to auslynchpci11."
+  (interactive)
+  (let ((buf (get-buffer-create "*ssh-auslynch*")))
+    (shell buf)
+    (with-current-buffer buf
+      (goto-char (point-max))
+      (insert "ssh -tt bdulauroy@auslynchpci11")
+      (comint-send-input))))
+
+(org-babel-do-load-languages
+ 'org-babel-load-languages
+ '((python . t)
+   (shell . t)
+   (emacs-lisp . t)
+   (gnuplot . t)
+   (R . t)
+   (latex . t)
+   ))
+
+(defun run-update-bat ()
+  "Run the update.bat script from the desktop."
+  (interactive)
+  (async-shell-command
+   "\"C:/Users/bdulauroy/OneDrive - Framatome/Desktop/update.bat\""))
+
+(defun timecard ()
+  "Insert a summary Org table of clocked time by date and charge code at point, grouped by day,
+and below it, insert a pivot table with charge code/description as rows and days as columns."
+  (interactive)
+  (require 'org)
+  (require 'org-element)
+  (require 'subr-x) ;; string utilities (Emacs 27+)
+
+  (let ((date-width 10)
+        (charge-width 28)
+        (desc-width 23)
+        (hours-width 7)
+        (entries '()))
+
+    ;; -----------------------------
+    ;; Collect all clock entries
+    ;; -----------------------------
+    (org-element-map (org-element-parse-buffer) 'headline
+      (lambda (headline)
+        (let* ((heading (org-element-property :raw-value headline))
+               (begin   (org-element-property :begin headline))
+               (chargecode nil)
+               (logbook (org-element-map headline 'drawer
+                          (lambda (drawer)
+                            (when (string= (org-element-property :drawer-name drawer) "LOGBOOK")
+                              drawer))
+                          nil t)))
+          (save-excursion
+            (goto-char begin)
+            (setq chargecode (org-entry-get nil "CHARGECODE" t)))
+          (when logbook
+            (let ((logbook-start (org-element-property :begin logbook))
+                  (logbook-end (org-element-property :end logbook)))
+              (save-excursion
+                (goto-char logbook-start)
+                (while (re-search-forward
+                        "^[ \t]*CLOCK: *\\[\\([0-9]+-[0-9]+-[0-9]+\\)[^]]*\\]--\\[\\([0-9]+-[0-9]+-[0-9]+\\)[^]]*\\].*=>[ \t]*\\([0-9]+\\):\\([0-9]+\\)"
+                        logbook-end t)
+                  (let* ((start-date (match-string 1))
+                         (hours (string-to-number (match-string 3)))
+                         (minutes (string-to-number (match-string 4)))
+                         (duration (+ hours (/ minutes 60.0))))
+                    (push (list :date start-date
+                                :chargecode (or chargecode "Unspecified")
+                                :project heading
+                                :hours duration)
+                          entries)))))))))
+
+    ;; -----------------------------
+    ;; Summary Table (by day) — unchanged logic except daily & grand totals
+    ;; -----------------------------
+    (let ((summary (make-hash-table :test 'equal)))
+      ;; Accumulate hours by (date, chargecode, project)
+      (dolist (e entries)
+        (let* ((date (plist-get e :date))
+               (charge (plist-get e :chargecode))
+               (project (plist-get e :project))
+               (key     (list date charge project)))
+          (puthash key (+ (gethash key summary 0) (plist-get e :hours)) summary)))
+
+      ;; Flatten to list and sort by date, then charge, then project
+      (let (lines)
+        (maphash
+         (lambda (key hours)
+           (pcase-let ((`(,date ,charge ,project) key))
+             (push (list date charge project hours) lines)))
+         summary)
+        (setq lines (sort lines
+                          (lambda (a b)
+                            (let ((da (car a)) (db (car b)))
+                              (if (string= da db)
+                                  (let ((ca (cadr a)) (cb (cadr b)))
+                                    (if (string= ca cb)
+                                        (string< (nth 2 a) (nth 2 b))
+                                      (string< ca cb)))
+                                (string< da db))))))
+        (let ((table-lines '())
+              (last-date nil)
+              (day-total 0.0)
+              (grand-total 0.0))
+
+          ;; Header
+          (push (format "| %-10s | %-28s | %-23s | %-7s |"
+                        "Date" "Charge Code" "Description" "Hours") table-lines)
+          (push (format "|-%s-+-%s-+-%s-+-%s-|"
+                        (make-string date-width ?-)
+                        (make-string charge-width ?-)
+                        (make-string desc-width ?-)
+                        (make-string hours-width ?-))
+                table-lines)
+
+          ;; Rows
+          (dolist (line lines)
+            (let ((date (nth 0 line))
+                  (charge (nth 1 line))
+                  (project (nth 2 line))
+                  (hours (nth 3 line)))
+              (when (and last-date (not (string= date last-date)))
+                ;; Insert subtotal for the previous day, then a blank row
+                (push (format "| %-10s | %-28s | %-23s | %7.2f |"
+                              "" "TOTAL" "" day-total)
+                      table-lines)
+                (push "|" table-lines) ;; blank row after day total
+                (setq day-total 0.0))
+              (setq last-date date)
+              (setq day-total   (+ day-total hours))
+              (setq grand-total (+ grand-total hours))
+              (push (format "| %-10s | %-28s | %-23s | %7.2f |"
+                            date charge project hours)
+                    table-lines)))
+
+          ;; Final day's total
+          (push (format "| %-10s | %-28s | %-23s | %7.2f |"
+                        "" "TOTAL" "" day-total)
+                table-lines)
+
+          ;; Footer separator + Grand TOTAL
+          (push (format "|-%s-+-%s-+-%s-+-%s-|"
+                        (make-string date-width ?-)
+                        (make-string charge-width ?-)
+                        (make-string desc-width ?-)
+                        (make-string hours-width ?-))
+                table-lines)
+          (push (format "| %-10s | %-28s | %-23s | %7.2f |"
+                        "TOTAL" "" "" grand-total)
+                table-lines)
+
+          ;; Insert and align
+          (let ((start (point)))
+            (insert (mapconcat #'identity (nreverse table-lines) "\n"))
+            (insert "\n\n")
+            (save-excursion
+              (goto-char start)
+              (org-table-align))))))
+
+    ;; -----------------------------
+    ;; Pivot Table (day-by-day with column TOTALS row)
+    ;; -----------------------------
+    (let* ((dates (sort (delete-dups (mapcar (lambda (e) (plist-get e :date)) entries)) #'string<))
+           (row-keys (delete-dups
+                      (mapcar (lambda (e) (list (plist-get e :chargecode)
+                                                (plist-get e :project)))
+                              entries)))
+           (pivot (make-hash-table :test 'equal)))
+      ;; Build pivot hash
+      (dolist (e entries)
+        (let* ((charge (plist-get e :chargecode))
+               (project (plist-get e :project))
+               (date    (plist-get e :date))
+               (key     (list charge project date)))
+          (puthash key (+ (gethash key pivot 0) (plist-get e :hours)) pivot)))
+
+      ;; Render pivot with bottom totals row
+      (let ((table-lines '()))
+        ;; Header
+        (push (concat
+               (format "| %-28s | %-23s |" "Charge Code" "Description")
+               (mapconcat (lambda (d) (format " %-10s |" d)) dates "")
+               "   Total |")
+              table-lines)
+        ;; Separator
+        (push (concat
+               (format "|-%s-+-%s-+" (make-string charge-width ?-) (make-string desc-width ?-))
+               (mapconcat (lambda (_d) (format "-%s-+" (make-string date-width ?-))) dates "")
+               (format "-%s-|" (make-string hours-width ?-)))
+              table-lines)
+        ;; Data rows
+        (dolist (row row-keys)
+          (let* ((charge (nth 0 row))
+                 (project (nth 1 row))
+                 (row-hours '())
+                 (total 0.0))
+            (dolist (d dates)
+              (let ((h (gethash (list charge project d) pivot 0)))
+                (push h row-hours)
+                (setq total (+ total h))))
+            (push (format "| %-28s | %-23s |%s %7.2f |"
+                          charge
+                          project
+                          (mapconcat (lambda (h) (format " %10.2f |" h)) (nreverse row-hours) "")
+                          total)
+                  table-lines)))
+
+        ;; Column totals
+        (let* ((col-sums
+                (mapcar (lambda (d)
+                          (let ((s 0.0))
+                            (dolist (row row-keys s)
+                              (let ((charge  (nth 0 row))
+                                    (project (nth 1 row)))
+                                (setq s (+ s (gethash (list charge project d) pivot 0)))))))
+                        dates))
+               (grand-total (apply #'+ col-sums)))
+          ;; Optional separator before totals row
+          (push (concat
+                 (format "|-%s-+-%s-+" (make-string charge-width ?-) (make-string desc-width ?-))
+                 (mapconcat (lambda (_d) (format "-%s-+" (make-string date-width ?-))) dates "")
+                 (format "-%s-|" (make-string hours-width ?-)))
+                table-lines)
+          ;; TOTAL row at bottom
+          (push (format "| %-28s | %-23s |%s %7.2f |"
+                        "TOTAL" ""
+                        (mapconcat (lambda (h) (format " %10.2f |" h)) col-sums "")
+                        grand-total)
+                table-lines))
+
+        ;; Insert and align
+        (let ((start (point)))
+          (insert (mapconcat #'identity (nreverse table-lines) "\n"))
+          (insert "\n")
+          (save-excursion
+            (goto-char start)
+            (org-table-align)))))))
+
+;;(require 'apdl-mode)
+;; Auto-load apdl-mode for additional file types
+;(add-to-list 'auto-mode-alist '("\\.dat\\'" . apdl-mode))
+;(add-to-list 'auto-mode-alist '("\\.inp\\'" . apdl-mode))
+;(add-to-list 'auto-mode-alist '("\\.mac\\'" . apdl-mode))
+
+;;; --- Content-based APDL detection for .dat/.inp/.mac ---
+;;(require 'apdl-mode) ;; ensure the mode is available
+
+(defun my-apdl--apdl-extension-p (file)
+  "Return non-nil if FILE has extension dat/inp/mac (case-insensitive)."
+  (when file
+    (let ((ext (downcase (file-name-extension file ""))))
+      (member ext '("dat" "inp" "mac")))))
+
+(defun my-apdl--looks-like-apdl-p ()
+  "Return non-nil if the current buffer looks like an APDL input deck.
+Scans only the first 30 lines for /TITLE, /PREP7, /SOLU, /POST1, or /POST26."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (let ((case-fold-search t))          ; be forgiving about case
+        (let ((end (progn (forward-line 30) (point))))
+          (goto-char (point-min))
+          (re-search-forward
+           ;; ^\s*/KEYWORD  — allow optional leading spaces before the slash
+           "^\\s*/\\(TITLE\\|PREP7\\|SOLU\\|POST1\\|POST26\\)\\b"
+           end t))))))
+
+(defun my-apdl-maybe-enable-apdl-mode ()
+  "Enable `apdl-mode' for .dat/.inp/.mac files that look like APDL."
+  (when (and (my-apdl--apdl-extension-p buffer-file-name)
+             (my-apdl--looks-like-apdl-p))
+    (apdl-mode)))
+
+;; Run the detector whenever a file is visited
+(add-hook 'find-file-hook #'my-apdl-maybe-enable-apdl-mode)
+;;; --------------------------------------------------------
+
+;; disable inline compression for TRAMP
+(with-eval-after-load 'tramp
+  (setq tramp-inline-compress-start-size nil))
