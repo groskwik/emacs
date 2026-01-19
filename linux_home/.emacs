@@ -201,6 +201,9 @@
 (require 'multiple-cursors)
 (global-set-key (kbd "C-x j") 'mc/edit-lines)
 
+(autoload 'visual-basic-mode "visual-basic-mode" "Visual Basic mode." t)
+;; Associate .vb files with visual-basic-mode
+(add-to-list 'auto-mode-alist '("\\.\\(vb\\|vbs\\)$" . visual-basic-mode))
 ;; (require 'sunrise)
 ;; (require 'sunrise-buttons)
 ;; (require 'sunrise-modeline)
@@ -305,6 +308,32 @@
 ;; compress all marked files
 (define-key dired-mode-map (kbd "C-c C-z") 'tda/zip)
 
+
+(defun my-compress-folder ()
+  "Compress the marked folder(s) using 7zip."
+  (interactive)
+  (let ((folders (dired-get-marked-files)))
+    (if folders
+        (let* ((output-name (file-name-base (car folders)))
+               (quoted-folders (mapconcat (lambda (folder) (format "\"%s\"" folder)) folders " "))
+               (command (format "7z a %s %s" (concat output-name ".7z") quoted-folders)))
+          (message "Running 7zip command: %s" command)
+          (async-shell-command command "*7zip-output*"))
+      (message "No folder selected"))))
+    
+(define-key dired-mode-map (kbd "C-c z") 'my-compress-folder)
+    
+(defun extract-7z-archive (archive)
+  "Extract ARCHIVE using 7z to a folder with the same name."
+  (interactive "fSelect archive: ")
+  (let* ((archive-path (expand-file-name archive))
+         (archive-dir (file-name-sans-extension archive-path)))
+    (unless (file-directory-p archive-dir)
+      (make-directory archive-dir t))
+    (let ((command (format "7z x \"%s\" -o\"%s\"" archive-path archive-dir)))
+      (async-shell-command command))))
+
+(global-set-key (kbd "C-c e") 'extract-7z-archive)
 ;; disable scrollbar also for client
 (defun my/disable-scroll-bars (frame)
   (modify-frame-parameters frame
