@@ -13,12 +13,26 @@
 
 (setq byte-compile-warnings '(cl-functions))
 
-;;https://www.reddit.com/r/emacs/comments/sv2ys8/emacs_noob_here_how_do_i_get_redo_functionality/
-;;(evil-set-undo-system 'undo-redo)
-;;https://github.com/syl20bnr/spacemacs/issues/14036   
-;;https://gitlab.com/ideasman42/emacs-undo-fu
-;;(global-undo-tree-mode)
-;;(evil-set-undo-system 'undo-tree)
+;; update my emacs packages
+(defun my/update-elpa-packages ()
+  "Update all installed ELPA packages without prompting."
+  (interactive)
+  (require 'package)
+  (package-initialize)
+  (package-refresh-contents)
+  (let ((upgraded 0))
+    (dolist (pkg package-alist)
+      (let* ((name (car pkg))
+             (installed (cadr pkg))
+             (available (car (cdr (assq name package-archive-contents)))))
+        (when (and available
+                   (version-list-< (package-desc-version installed)
+                                   (package-desc-version available)))
+          (package-install available)
+          (setq upgraded (1+ upgraded)))))
+    (message "ELPA update complete: %d package(s) upgraded" upgraded)))
+
+(setq evil-undo-system 'undo-redo)
 
 (defun ido-remove-tramp-from-cache nil
   "Remove any TRAMP entries from `ido-dir-file-cache'.
@@ -34,8 +48,6 @@
 (defun ido-kill-emacs-hook ()
   (ido-remove-tramp-from-cache)
   (ido-save-history))
-
-;;(with-eval-after-load 'dired (require 'dired-filetype-face))
 
 ;; Details toggling is bound to "(" in `dired-mode' by default
 (setq diredp-hide-details-initially-flag nil)
@@ -54,6 +66,12 @@
                        modus-vivendi
                        spacemacs-light
                        spacemacs-dark
+                       cyberpunk
+                       alect-light
+                       alect-dark
+                       ample
+                       ample-flat
+                       ample-light
                        solarized-light
                        solarized-dark
                        monokai-pro
@@ -70,9 +88,9 @@
                        doom-spacegrey
                        doom-nord-light
                        dracula
+                       zenburn
                        material-light
                        material
-                       zenburn
                        gruvbox-light-medium
                        doom-dracula
                        doom-opera
@@ -191,8 +209,8 @@
 ;; (require 'sunrise-tree)
 ;; (require 'sunrise-w32)
 
-(add-hook 'prog-mode-hook 'linum-mode)
-(add-hook 'find-file-hook 'linum-mode)
+;; Modern replacement for linum-mode
+(global-display-line-numbers-mode t)
 
 ;; copy by default to the other window (dired)
 (setq dired-dwim-target t)
@@ -219,14 +237,6 @@
   (interactive)
   (set-buffer-file-coding-system 'unix 't) )
 
-;;(defun dos2unix2-m (buffer)
-;;      "Automate M-% C-q C-m RET C-q C-j RET / use if ^/M can be seen"
-;;      (interactive "*b")
-;;      (save-excursion
-;;        (goto-char (point-min))
-;;        (while (search-forward (string ?\C-m) nil t)
-;;          (replace-match (string ?\C-j) nil t))))
-
 ;; clean buffer list        
 (require 'midnight)
 (midnight-delay-set 'midnight-delay "4:30am")
@@ -248,18 +258,19 @@
 (setq org-log-done t)
 
 ;; kwustoss mode
-(require 'kwu-mode)
-(add-to-list 'auto-mode-alist '("\\TAPE60\\'" . kwu-mode))
+(require 'kwu2-mode)
+(add-to-list 'auto-mode-alist '("\\TAPE60\\'" . kwu2-mode))
+
 (require 'kwu5-mode)
 (add-to-list 'auto-mode-alist '("\\tape1\\'" . kwu5-mode))
 
+(require 'kwutape8-transient)
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(default ((t (:family "Consolas" :foundry "outline" :slant normal :weight normal :height 98 :width normal))))
  '(vdiff-subtraction-face ((t (:inherit diff-added)))))
 
 (setq-default line-spacing 0.1)
@@ -339,123 +350,58 @@
                                  'word-mode
                                  nil)))
 
-(defun ora-ediff-hook ()
-  (ediff-setup-keymap)
-  (define-key ediff-mode-map "j" 'ediff-next-difference)
-  (define-key ediff-mode-map "k" 'ediff-previous-difference))
-(add-hook 'ediff-mode-hook 'ora-ediff-hook)
-;; restore windows when quit ediff
-(winner-mode)
-(add-hook 'ediff-after-quit-hook-internal 'winner-undo)
+(defun ora--window-file (win)
+  "Return the visited file path shown in WIN, or nil."
+  (with-current-buffer (window-buffer win)
+    (buffer-file-name)))
 
-;; use e in dired to call ediff
-(define-key dired-mode-map "e" 'ora-ediff-files)
-(defun ora-ediff-files ()
+(defun ora-ediff-left-right-windows ()
+  "Ediff the files currently displayed in the left and right windows.
+This mimics 'vdiff' usage: open file left, open file right, press key."
   (interactive)
-  (let ((files (dired-get-marked-files))
-        (wnd (current-window-configuration)))
-    (if (<= (length files) 2)
-        (let ((file1 (car files))
-              (file2 (if (cdr files)
-                         (cadr files)
-                       (read-file-name
-                        "file: "
-                        (dired-dwim-target-directory)))))
-          (if (file-newer-than-file-p file1 file2)
-              (ediff-files file2 file1)
-            (ediff-files file1 file2))
-          (add-hook 'ediff-after-quit-hook-internal
-                    (lambda ()
-                      (setq ediff-after-quit-hook-internal nil)
-                      (set-window-configuration wnd))))
-      (error "no more than 2 files should be marked"))))
-(defun with-face (str &rest face-plist)
-  (propertize str 'face face-plist))
+  (let* ((wnd (current-window-configuration))
+         (wins (window-list nil 'no-minibuf))
+         ;; Pick leftmost and rightmost windows on the frame
+         (sorted (sort (copy-sequence wins)
+                       (lambda (a b)
+                         (< (car (window-edges a))
+                            (car (window-edges b))))))
+         (left-win (car sorted))
+         (right-win (car (last sorted)))
+         (file1 (ora--window-file left-win))
+         (file2 (ora--window-file right-win)))
 
-(setq eshell-prompt-function (lambda nil
-                               (concat
-                                (propertize (eshell/pwd) 'face `(:foreground "#8be9fd"))
-                                (propertize " $ " 'face `(:foreground "#50fa7b")))))
-(setq eshell-highlight-prompt nil)
-;; one prompt only for recursive
+    (unless (and file1 file2)
+      (error "Both left and right windows must be visiting files (not only Dired)."))
+
+    ;; Optional ordering: keep newer on right (or remove this block if you don't care)
+    (if (file-newer-than-file-p file1 file2)
+        (ediff-files file2 file1)
+      (ediff-files file1 file2))
+
+    (add-hook 'ediff-after-quit-hook-internal
+              (lambda ()
+                (setq ediff-after-quit-hook-internal nil)
+                (set-window-configuration wnd)))))
+
+;; Bind to F7 (change if you want another key)
+(global-set-key (kbd "<f7>") #'ora-ediff-left-right-windows)
+
 (setq dired-recursive-copies 'always)
 (setq dired-recursive-deletes 'always)
 
 (require 'org-bullets)
 (add-hook 'org-mode-hook (lambda () (org-bullets-mode 1)))
 
-;; python setup
-;; -----------------------------------------------
+(use-package python
+  :ensure nil
+  :hook ((python-mode . (lambda ()
+                          (setq-local python-shell-dedicated 'project))))
+  :bind (:map python-mode-map
+              ("C-c C-b" . python-shell-send-buffer)
+              ("C-c C-r" . python-shell-send-region)
+              ("C-c C-f" . python-shell-send-defun)))
 
-;; setup for python mode
-;; ********************************************
-;; fix a bug in emacs 25 and python https://github.com/syl20bnr/spacemacs/issues/8797
-(setq python-shell-completion-native-enable nil)
-
-;; allows use of name == main with python-mode
-(require 'python)
-(define-key python-mode-map (kbd "C-c C-c")
-  (lambda () (interactive) (python-shell-send-buffer t)))
-
-;; help python inferior mode to scroll
-;; (add-hook 'inferior-python-mode-hook
-;;           (lambda ()
-;;             (setq comint-move-point-for-output t)
-;;             (setq indent-tabs-mode nil)
-;;             (infer-indentation-style)))
-
-(use-package pyvenv
-  :ensure t
-  :config
-  (pyvenv-activate "C:/Users/bdulauroy/AppData/Roaming/Anaconda3/envs/python3.8/")
-  (pyvenv-mode 1))
-
-(defun r-activate ()
-  (interactive)
-  (pyvenv-activate "C:/Users/bdulauroy/AppData/Roaming/Anaconda3/envs/r_env/"))
-
-(global-set-key (kbd "C-c C-r") 'r-activate)
-
-;; https://www.joseferben.com/posts/switching_from_elpy_to_anaconda_mode/
-;; ********************************************
-
-;; (use-package python-black
-;;   :ensure t
-;;   :bind (("C-c b" . python-black-buffer)))
-
-;; (use-package anaconda-mode
-;;   :ensure t
-;;   :bind (("C-c C-x" . next-error))
-;;   :config
-;;   (require 'pyvenv)
-;;   (add-hook 'python-mode-hook 'anaconda-mode))
-
-;; (use-package company-anaconda
-;;   :ensure t
-;;   :config
-;;   (eval-after-load "company"
-;;    '(add-to-list 'company-backends '(company-anaconda :with company-capf))))
-
-;; (use-package highlight-indent-guides
-;;   :ensure t
-;;   :config
-;;   (add-hook 'python-mode-hook 'highlight-indent-guides-mode)
-;;   (setq highlight-indent-guides-method 'character))
-
-;; (use-package flycheck
-;;   :ensure t
-;;   :init (global-flycheck-mode))
-;; *******************
-
-;; elpy python ide
-;; (use-package elpy
-;;   :ensure t
-;;   :init
-;;   (elpy-enable))
-
-(add-to-list 'process-coding-system-alist '("python" . (utf-8 . utf-8)))
-(setq elpy-rpc-python-command "python")
-;; -----------------------------------------------
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
@@ -467,7 +413,7 @@
    '("78e6be576f4a526d212d5f9a8798e5706990216e9be10174e3f3b015b8662e27" default))
  '(org-agenda-files '("c:/Users/bdulauroy/work.org"))
  '(package-selected-packages
-   '(csv-mode anaconda-mode color-theme-sanityinc-tomorrow moe-theme modus-themes doom-themes solarized-theme leuven-theme anti-zenburn-theme twilight-bright-theme zenburn-theme melancholy-theme which-key keepass-mode jupyter gnuplot-mode dir-treeview beacon elpygen modus-operandi-theme highlight pdf-tools focus dired-rainbow material-theme conda pyvenv-auto disk-usage gnuplot dired-rsync popup-kill-ring elpy latex-preview-pane helm-swoop dired-hacks-utils evil-ediff multi use-package org-bullets projectile rainbow-delimiters emms rainbow-mode vdiff ## sunrise-x-tabs sunrise-x-modeline sunrise-x-buttons spacemacs-theme rpn-calc powerline openwith neotree multiple-cursors monokai-pro-theme minimap magit indent-guide hydra helm gruvbox-theme evil ess dracula-theme company auto-complete auctex)))
+   '(csharp-mode csv-mode anaconda-mode color-theme-sanityinc-tomorrow moe-theme modus-themes doom-themes solarized-theme leuven-theme anti-zenburn-theme twilight-bright-theme zenburn-theme melancholy-theme which-key keepass-mode jupyter gnuplot-mode dir-treeview beacon elpygen modus-operandi-theme highlight pdf-tools focus dired-rainbow material-theme conda pyvenv-auto disk-usage gnuplot dired-rsync popup-kill-ring elpy latex-preview-pane helm-swoop dired-hacks-utils evil-ediff multi use-package org-bullets projectile rainbow-delimiters emms rainbow-mode vdiff ## sunrise-x-tabs sunrise-x-modeline sunrise-x-buttons spacemacs-theme rpn-calc powerline openwith neotree multiple-cursors monokai-pro-theme minimap magit indent-guide hydra helm gruvbox-theme evil ess dracula-theme company auto-complete auctex)))
 
 (require 'popup)
 (require 'pos-tip)
@@ -489,13 +435,6 @@
 ;; yes replaced by y, no by n
 (defalias 'yes-or-no-p 'y-or-n-p)
 
-;; This extension allows you to quickly mark the next occurence of a region and edit them all at once. Wow!
-;; (require 'mark-more-like-this)
-;; (global-set-key (kbd "C-c p") 'mark-previous-like-this)
-;; (global-set-key (kbd "C-c q") 'mark-next-like-this)
-;; (global-set-key (kbd "C-M-m") 'mark-more-like-this) ; like the other two, but takes an argument (negative is previous)
-;; (global-set-key (kbd "C-*") 'mark-all-like-this)
-
 ;;Every time emacs encounters a hexadecimal code that resembles a color, it will automatically highlight it in the appropriate color.
 (use-package rainbow-mode
   ;; :ensure t
@@ -514,14 +453,11 @@
 
 (setq scroll-conservatively 100)
 
-
 ;; disable python indetn warning
 (setq python-indent-guess-indent-offset-verbose nil)
 
-;; from chatGPT
-;; yes, you can disable the prompt asking whether to use a new buffer or not when running a new async command with async-shell-command in Emacs. You can achieve this by customizing the variable async-shell-command-buffer to always use a new buffer.
+;; disable the prompt asking whether to use a new buffer or not when running a new async command with async-shell-command in Emacs. You can achieve this by customizing the variable async-shell-command-buffer to always use a new buffer.
 (setq async-shell-command-buffer 'new-buffer)
-
 
 (add-to-list 'display-buffer-alist '("*Async Shell Command*" display-buffer-no-window (nil)))
 (defun async-shell-command-no-window
@@ -551,19 +487,24 @@ as input."
    (read-shell-command "Shell command on buffer: ")))
 (global-set-key (kbd "C-x C-t") 'shell-command-on-buffer)
 
-(defun cpm/show-and-copy-buffer-filename ()
-  "Show the full path to the current file in the minibuffer and copy to clipboard."
-  (interactive)
-  (let ((file-name (buffer-file-name)))
-    (if file-name
-        (progn
-          (message file-name)
-          (kill-new file-name))
-      (error "Buffer not visiting a file"))))
+(defun cpm/copy-buffer-file-name (&optional full)
+  "Copy the current buffer file name to the clipboard.
 
-;;(evil-set-initial-state 'ibuffer-mode 'normal)
-;;(evil-set-initial-state 'bookmark-bmenu-mode 'normal)
-(evil-set-initial-state 'sunrise-mode 'emacs)
+With prefix argument FULL (C-u), copy the full absolute path.
+Without prefix, copy the abbreviated path (with ~)."
+  (interactive "P")
+  (let ((file (buffer-file-name)))
+    (unless file
+      (user-error "Current buffer is not visiting a file"))
+    (let* ((path (if full
+                     (expand-file-name file)
+                   (abbreviate-file-name file))))
+      (kill-new path)
+      (message "Copied: %s" path))))
+
+(global-set-key (kbd "C-c p f") #'cpm/copy-buffer-file-name)
+
+;(evil-set-initial-state 'sunrise-mode 'emacs)
 (evil-set-initial-state 'image-mode 'emacs)
 
 ;; windmove. With its default keybindings, it allows switching
@@ -576,21 +517,7 @@ as input."
 (setq use-package-compute-statistics t)
 
 (add-hook 'shell-mode-hook 'ansi-color-for-comint-mode-on)
-;;(add-to-list 'exec-path "c:/Apps/ImageMagick")
-;;(add-to-list 'exec-path "C:/Program Files (x86)/Gnuplot/bin")
-;;(add-to-list 'exec-path "C:/Users/benoi/anaconda3/Scripts")
-;; if not set in the environment variable on the system
-(setq shell-file-name explicit-shell-file-name)
-;;(add-to-list 'exec-path "C:/cygwin64/bin")
-;;(add-to-list 'exec-path "C:/Apps/emacs/libexec/emacs/27.1/x86_64-w64-mingw32")
-;;(add-to-list 'exec-path "C:/Apps/bin")
-;;(setenv "SHELL" "cmdproxy.exe")
 (setq using-unix-filesystems t)
-;;(setq shell-file-name "cmdproxy")
-;;(setq explicit-shell-file-name "cmdproxy.exe")
-;;(setq explicit-shell-file-name "bash.exe")
-;;(setq shell-command-switch "/C")
-;;(setq exec-path (append exec-path '("C:/Windows/System32/OpenSSH")))
 
 (defun paste-windows-path (pth) (interactive "*sWindows path:") (insert (replace-regexp-in-string "\\\\" "\\\\\\\\" pth)))
 
@@ -652,11 +579,6 @@ as input."
   :ensure t
   :config
   (add-hook 'org-mode-hook (lambda () (org-bullets-mode))))
-
-;; (use-package dmenu
-;;   :ensure t
-;;   :bind
-;;  ("S-SPC" . 'dmenu))
 
 (setq scroll-conservatively 100)
 
@@ -722,9 +644,6 @@ as input."
     (dired-rainbow-define-chmod executable-unix "#38c172" "-.*x.*")
     )) 
 
-;;(require 'auto-package-update)
-;;(auto-package-update-maybe)
-
 (require 'ace-window)
 (global-set-key (kbd "M-o") 'ace-window)
 
@@ -740,126 +659,90 @@ as input."
 
 (set-face-foreground 'vertical-border "grey")
 
-;; Linux specific
+(require 'tramp)
 
-;; rsync files
-;; (defun ora-dired-rsync (dest)
-;;   (interactive
-;;    (list (expand-file-name
-;;           (read-file-name "Rsync -arvzu --delete to:" (dired-dwim-target-directory)))))
-;;   ;; store all selected files into "files" list
-;;   (let* ((files (dired-get-marked-files nil current-prefix-arg))
-;;          ;; the rsync command
-;;          (tmtxt/rsync-command "rsync -arvzu --delete --progress ")
-;;          (ssh_prefix "")
-;;          )
-;;     ;; add all selected file names as arguments to the rsync command
-;;     (dolist (file files)
-;;       (setq tmtxt/rsync-command
-;;             (concat tmtxt/rsync-command
-;;                     (if (string-match "^/ssh:\\(.*:\\)\\(.*\\)$" file)
-;;                         (progn
-;;                           (if (string= ssh_prefix "")
-;;                               (progn
-;;                                 (setq ssh_prefix (format " -e ssh \"%s%s\"" (match-string 1 file) (shell-quote-argument (match-string 2 file))))
-;;                                 (format " -e ssh \"%s%s\"" (match-string 1 file) (shell-quote-argument (match-string 2 file))))
-;;                             ;; rsync want only filenames for second source files
-;;                             (format "\"%s\"" (nth 2 (s-split ":" file)))))
-;;                       (shell-quote-argument file)) " ")))
-;;     (when (not (string= ssh_prefix ""))
-;;       ;; Need convert command from:
-;;       ;; rsync -arvzu --delete --progress -e ssh "root@10.63.200.24:/root/files" "/root/roles" /Users/bravo/temp/rsync/
-;;       ;; to:
-;;       ;; rsync -arvzu --delete --progress -e ssh "root@10.63.200.24:/root/files /root/roles" /Users/bravo/temp/rsync/
-;;       (setq tmtxt/rsync-command (replace-regexp-in-string "\" \"" " " tmtxt/rsync-command))
-;;       )
-;;     ;; append the destination
-;;     (setq tmtxt/rsync-command
-;;           (concat tmtxt/rsync-command
-;;                   (if (string-match "^/ssh:\\(.*\\)$" dest)
-;;                       (format " -e ssh %s" (match-string 1 dest))
-;;                     (shell-quote-argument dest))))
-;;     ;; run the async shell command
-;;     (let ((default-directory (expand-file-name "~")))
-;;       (async-shell-command tmtxt/rsync-command))
-;;     (message tmtxt/rsync-command)
-;;     ;; finally, switch to that window
-;;     (other-window 1)))
-;; rsync files
+(defun my/tramp-rsync-remote (path)
+  "If PATH is TRAMP (/ssh:user@host:/path), return rsync form user@host:/path.
+If PATH is local, return PATH unchanged."
+  (if (file-remote-p path)
+      (let* ((v (tramp-dissect-file-name path))
+             (user (tramp-file-name-user v))
+             (host (tramp-file-name-host v))
+             (local (tramp-file-name-localname v)))
+        (concat (if (and user (not (string-empty-p user)))
+                    (concat user "@")
+                  "")
+                host ":" local))
+    path))
+
+(defun my/rsync-needs-ssh-p (src dest)
+  "Return non-nil if rsync should be run with -e ssh based on SRC/DEST."
+  (or (file-remote-p src) (file-remote-p dest)))
+(defun ora-dired-rsync2 (dest)
+  (interactive
+   (list (expand-file-name
+          (read-file-name "Rsync -arv to: " (dired-dwim-target-directory)))))
+
+  (let* ((source-dir (file-name-as-directory (dired-current-directory)))
+         (buffer-name
+          (generate-new-buffer-name
+           (format "*rsync %s -> %s*"
+                   (file-name-nondirectory (directory-file-name source-dir))
+                   (if (file-remote-p dest)
+                       (my/tramp-rsync-remote dest)
+                     (file-name-nondirectory (directory-file-name dest))))))
+         (cmd-parts (list "rsync" "-arv" "--progress")))
+
+    ;; Add -e ssh if either side is remote
+    (when (my/rsync-needs-ssh-p source-dir dest)
+      (setq cmd-parts (append cmd-parts (list "-e" "ssh"))))
+
+    ;; Source dir then dest
+    (setq cmd-parts
+          (append cmd-parts
+                  (list (shell-quote-argument (my/tramp-rsync-remote source-dir))
+                        (shell-quote-argument (my/tramp-rsync-remote dest)))))
+
+    (let ((rsync-command (mapconcat #'identity cmd-parts " "))
+          (default-directory (expand-file-name "~")))
+      (async-shell-command rsync-command buffer-name)
+      (message "%s" rsync-command)
+      (other-window 1)
+      (switch-to-buffer buffer-name))))
 
 (defun ora-dired-rsync (dest)
   (interactive
    (list (expand-file-name
-          (read-file-name "Rsync -arvzu to:" (dired-dwim-target-directory)))))
-  ;; store all selected files into "files" list
-  (let* ((source-dir (dired-current-directory)) ;; Get the current directory as the source
-         (files (dired-get-marked-files nil current-prefix-arg))
-         ;; initialize the rsync command
-         (rsync-command "rsync -arvzu --progress ")
-         (ssh_prefix "")
-         ;; Generate a unique buffer name based on source and destination
-         (buffer-name (generate-new-buffer-name
-                       (format "*Rsync from %s to %s*"
-                               (file-name-nondirectory (directory-file-name source-dir))
-                               (if (string-match "^/ssh:\\(.*\\)$" dest)
-                                   (match-string 1 dest)
-                                 (file-name-nondirectory (directory-file-name dest))))))
-         )
-    ;; add all selected file names as arguments to the rsync command
-    (dolist (file files)
-      (setq rsync-command
-            (concat rsync-command
-                    (if (string-match "^/ssh:\\(.*:\\)\\(.*\\)$" file)
-                        (let ((ssh-dest (match-string 1 file))
-                              (ssh-file (match-string 2 file)))
-                          (if (string= ssh_prefix "")
-                              (setq ssh_prefix (format " -e ssh \"%s%s\"" ssh-dest (shell-quote-argument ssh-file))))
-                          (format "\"%s\"" (shell-quote-argument ssh-file)))
-                      (shell-quote-argument file)) " ")))
-    (when (not (string= ssh_prefix ""))
-      (setq rsync-command (replace-regexp-in-string "\" \"" " " rsync-command)))
-    ;; append the destination
-    (setq rsync-command
-          (concat rsync-command
-                  (if (string-match "^/ssh:\\(.*\\)$" dest)
-                      (format " -e ssh %s" (match-string 1 dest))
-                    (shell-quote-argument dest))))
-    ;; run the async shell command with a unique buffer name
-    (let ((default-directory (expand-file-name "~")))
-      (async-shell-command rsync-command buffer-name))
-    (message rsync-command)
-    ))
+          (read-file-name "Rsync -arvzu to: " (dired-dwim-target-directory)))))
+
+  (let* ((files (dired-get-marked-files nil current-prefix-arg))
+         (source-dir (dired-current-directory))
+         (buffer-name
+          (generate-new-buffer-name
+           (format "*Rsync from %s to %s*"
+                   (file-name-nondirectory (directory-file-name source-dir))
+                   (if (file-remote-p dest)
+                       (my/tramp-rsync-remote dest)
+                     (file-name-nondirectory (directory-file-name dest))))))
+         ;; Build rsync base
+         (cmd-parts (list "rsync" "-arvzu" "--progress")))
+    ;; Add -e ssh if either side is remote
+    (when (my/rsync-needs-ssh-p (car files) dest)
+      (setq cmd-parts (append cmd-parts (list "-e" "ssh"))))
+
+    ;; Append sources
+    (dolist (f files)
+      (setq cmd-parts (append cmd-parts (list (shell-quote-argument (my/tramp-rsync-remote f))))))
+
+    ;; Append destination
+    (setq cmd-parts (append cmd-parts (list (shell-quote-argument (my/tramp-rsync-remote dest)))))
+
+    (let ((rsync-command (mapconcat #'identity cmd-parts " "))
+          (default-directory (expand-file-name "~")))
+      (async-shell-command rsync-command buffer-name)
+      (message "%s" rsync-command))))
 
 (define-key dired-mode-map "Y" 'ora-dired-rsync)
-
-(defun ora-dired-rsync2 (dest)
-  (interactive
-   (list (expand-file-name
-          (read-file-name "Rsync -arv to:" (dired-dwim-target-directory)))))
-  (let* ((source-dir (file-name-as-directory (dired-current-directory)))
-         (buffer-name (format "*rsync %s -> %s*"
-                              (file-name-nondirectory (directory-file-name source-dir))
-                              (if (string-match "^/ssh:\\(.*\\)$" dest)
-                                  (match-string 1 dest)
-                                (file-name-nondirectory (directory-file-name dest)))))
-         (tmtxt/rsync-command (format "rsync -arv --progress %s"
-                                      (shell-quote-argument source-dir))))
-    (if (string-match "^/ssh:\\(.*\\)$" dest)
-        (setq tmtxt/rsync-command
-              (format "%s -e ssh %s" tmtxt/rsync-command (match-string 1 dest)))
-      (setq tmtxt/rsync-command
-            (concat tmtxt/rsync-command " " (shell-quote-argument dest))))
-    
-    ;; Run the async shell command specifying a unique buffer name
-    (let ((default-directory (expand-file-name "~")))
-      (async-shell-command tmtxt/rsync-command buffer-name))
-    (message tmtxt/rsync-command)
-    
-    ;; After running the command, split the window and switch to the named output buffer
-;;    (split-window-below) ;; Split the window vertically
-    (other-window 1)     ;; Move to the newly created window
-    (switch-to-buffer buffer-name) ;; Switch to the async command's output buffer
-    ))
 
 (define-key dired-mode-map "T" 'ora-dired-rsync2)
 
@@ -869,6 +752,25 @@ as input."
                     :family "Liberation Mono"
                     :height 85)
 
+(setq dired-guess-shell-alist-user
+      '(("\\.pdf\\'" "okular ? &" "evince ? &" "inkscape ? &")
+        ("\\.ps\\'" "okular ? &" "evince ? &" "inkscape ? &")
+        ("\\.eps\\'" "okular ? &" "evince ? &" "inkscape ? &")
+        ("\\.svg\\'" "eog ? &" "inkscape ? &")
+        ("\\.png\\'" "eog ? &" "display ? &" "gwenview ? &")
+        ("\\.jpg\\'" "eog ? &" "display ? &" "gwenview ? &")
+        ("\\.jpeg\\'" "eog ? &" "display ? &" "gwenview ? &")
+        ("\\.gif\\'" "eog ? &" "display ? &" "gwenview ? &")
+        ("\\.txt\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.csv\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.dat\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.inp\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.f\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.f90\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.c\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.cpp\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.plt\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")
+        ("\\.gp\\'" "nedit ? &" "gedit ? &" "gvim ? &" "kate ? &" "kwrite ? &" "code ? &")))
 
 (defun dired-open-with-choice-linux ()
   "Dired helper to open files or perform format conversions."
@@ -891,13 +793,13 @@ as input."
                    ((string-match "\\.\\(docx\\|docm\\)\\'" file) '("libreoffice --writer"))
                    ((string-match "\\.\\(pptx\\|pptm\\)\\'" file) '("libreoffice --impress"))
                    ((string-match "\\.\\(xlsx\\|xlsm\\|xls\\)\\'" file) '("libreoffice --calc"))
-                   ((string-match "\\.csv\\'" file) '("libreoffice --calc" "nedit" "gvim"))
+                   ((string-match "\\.csv\\'" file) '("libreoffice --calc" "nedit" "gvim" "code"))
                    ;; Archives
                    ((string-match "\\.\\(zip\\|7z\\|rar\\|tar.gz\\|tar.xz\\|gz\\)\\'" file) '("ark"))
                    ;; Audio
                    ((string-match "\\.\\(mp3\\|wav\\|flac\\)\\'" file) '("vlc" "mpv" "rhythmbox"))
                    ;; Text files
-                   ((string-match "\\.\\(txt\\|dat\\|nfo\\|ini\\|md\\|f\\|f90\\)\\'" file) '("gedit" "nedit" "gvim" "kate" "kwrite" "code"))
+                   ((string-match "\\.\\(txt\\|dat\\|inp\\|ini\\|md\\|f\\|f90\\)\\'" file) '("nedit" "gedit" "gvim" "kate" "kwrite" "code"))
                    ;; Images
                    ((string-match "\\.\\(png\\|jpg\\|jpeg\\|bmp\\|tif\\)\\'" file) '("display" "eog" "gimp" "gwenview"))))
          (program (helm-comp-read "Open with: " choices :must-match t)))
@@ -948,7 +850,7 @@ as input."
       (start-process-shell-command "dired-open" nil
                                    (format "%s %s &" program (shell-quote-argument file)))))))
 
-(define-key dired-mode-map (kbd "!") 'dired-open-with-choice-linux)
+(define-key dired-mode-map (kbd "C-c o") 'dired-open-with-choice-linux)
 
 (define-key dired-mode-map (kbd "C-c d") 
   (lambda () (interactive) (shell-command "display -resize 70% *.svg &")))
@@ -979,81 +881,6 @@ as input."
 ;; https://www.emacswiki.org/emacs/EmacsSvg
 (auto-image-file-mode 1) 
 
-;; https://emacsnotes.wordpress.com/2018/08/09/222/
-;; (with-eval-after-load "doc-view"
-;;   (easy-menu-define my-doc-view-menu doc-view-mode-map "Menu for Doc-View Mode."
-;;     '("DocView"
-;;       ["Switch to a different mode" doc-view-toggle-display :help "Switch to a different mode"]
-;;       ["Open Text" doc-view-open-text :help "Display the current doc's contents as text"]
-;;       "--"
-;;       ("Navigate Doc"
-;;        ["Goto Page ..." doc-view-goto-page :help "View the page given by PAGE"]
-;;        "--"
-;;        ["Scroll Down" doc-view-scroll-down-or-previous-page :help "Scroll page down ARG lines if possible, else goto previous page"]
-;;        ["Scroll Up" doc-view-scroll-up-or-next-page :help "Scroll page up ARG lines if possible, else goto next page"]
-;;        "--"
-;;        ["Next Line" doc-view-next-line-or-next-page :help "Scroll upward by ARG lines if possible, else goto next page"]
-;;        ["Previous Line" doc-view-previous-line-or-previous-page :help "Scroll downward by ARG lines if possible, else goto previous page"]
-;;        ("Customize"
-;;         ["Continuous Off"
-;;          (setq doc-view-continuous nil)
-;;          :help "Stay put in the current page, when moving past first/last line" :style radio :selected
-;;          (eq doc-view-continuous nil)]
-;;         ["Continuous On"
-;;          (setq doc-view-continuous t)
-;;          :help "Goto to the previous/next page, when moving past first/last line" :style radio :selected
-;;          (eq doc-view-continuous t)]
-;;         "---"
-;;         ["Save as Default"
-;;          (customize-save-variable 'doc-view-continuous doc-view-continuous)
-;;          t])
-;;        "--"
-;;        ["Next Page" doc-view-next-page :help "Browse ARG pages forward"]
-;;        ["Previous Page" doc-view-previous-page :help "Browse ARG pages backward"]
-;;        "--"
-;;        ["First Page" doc-view-first-page :help "View the first page"]
-;;        ["Last Page" doc-view-last-page :help "View the last page"])
-;;       "--"
-;;       ("Adjust Display"
-;;        ["Enlarge" doc-view-enlarge :help "Enlarge the document by FACTOR"]
-;;        ["Shrink" doc-view-shrink :help "Shrink the document"]
-;;        "--"
-;;        ["Fit Width To Window" doc-view-fit-width-to-window :help "Fit the image width to the window width"]
-;;        ["Fit Height To Window" doc-view-fit-height-to-window :help "Fit the image height to the window height"]
-;;        "--"
-;;        ["Fit Page To Window" doc-view-fit-page-to-window :help "Fit the image to the window"]
-;;        "--"
-;;        ["Set Slice From Bounding Box" doc-view-set-slice-from-bounding-box :help "Set the slice from the document's BoundingBox information"]
-;;        ["Set Slice Using Mouse" doc-view-set-slice-using-mouse :help "Set the slice of the images that should be displayed"]
-;;        ["Set Slice" doc-view-set-slice :help "Set the slice of the images that should be displayed"]
-;;        ["Reset Slice" doc-view-reset-slice :help "Reset the current slice"])
-;;       ("Search"
-;;        ["New Search ..."
-;;         (doc-view-search t)
-;;         :help "Jump to the next match or initiate a new search if NEW-QUERY is given"]
-;;        "--"
-;;        ["Search" doc-view-search :help "Jump to the next match or initiate a new search if NEW-QUERY is given"]
-;;        ["Backward" doc-view-search-backward :help "Call `doc-view-search' for backward search"]
-;;        "--"
-;;        ["Show Tooltip" doc-view-show-tooltip :help nil])
-;;       ("Maintain"
-;;        ["Reconvert Doc" doc-view-reconvert-doc :help "Reconvert the current document"]
-;;        "--"
-;;        ["Clear Cache" doc-view-clear-cache :help "Delete the whole cache (`doc-view-cache-directory')"]
-;;        ["Dired Cache" doc-view-dired-cache :help "Open `dired' in `doc-view-cache-directory'"]
-;;        "--"
-;;        ["Revert Buffer" doc-view-revert-buffer :help "Like `revert-buffer', but preserves the buffer's current modes"]
-;;        "--"
-;;        ["Kill Proc" doc-view-kill-proc :help "Kill the current converter process(es)"]
-;;        ["Kill Proc And Buffer" doc-view-kill-proc-and-buffer :help "Kill the current buffer"])
-;;       "--"
-;;       ["Customize"
-;;        (customize-group 'doc-view)]))
-;;   (easy-menu-define my-doc-view-minor-mode-menu doc-view-minor-mode-map "Menu for Doc-View Minor Mode."
-;;     '("DocView*"
-;;       ["Display in DocView Mode" doc-view-toggle-display :help "View"]
-;;       ["Exit DocView Mode" doc-view-minor-mode])))
-
 ;; remove menu bar
 ;;(menu-bar-mode -1)
 
@@ -1063,12 +890,6 @@ as input."
                     :background "#e8e8e7"
                     :foreground "black"
                     :bold t)
-
-;; use csh in Lyon with c-x t key
-;;(defun csh ()
-;;  (interactive)
-;;  (term "/bin/csh"))
-;;(global-set-key (kbd "C-x t") 'csh)
 
 (defun my-sh-send-command (command)
   "Send command to the current shell process.
@@ -1117,7 +938,6 @@ as input."
 
 (global-set-key (kbd "C-c C-t") 'compare-files-with-tool)
 
-
 (defun compare-files-with-gvim ()
   "Compare two files in Emacs using gvim."
   (interactive)
@@ -1128,42 +948,21 @@ as input."
         (shell-command (format "%s %s %s" gvim-command left-file right-file))
       (message "Please open two files for comparison first."))))
 
-(global-set-key (kbd "C-c C-v") 'compare-files-with-gvim)
-    
-;; ;; (global-set-key (kbd "C-c j") 'create-script-with-shebang)
-;; (defun create-script-with-shebang (file-name)
-;;   "Create a new script file with a specified shebang line and open in Emacs."
-;;   (interactive "sEnter script name: ")
-;;   (let* ((file-path (expand-file-name file-name))
-;;          (language (completing-read "Choose shebang (Bash [b] | Python [p] | PBS [pbs] | Gnuplot [g]): "
-;;                                     '(("b" "Bash") ("p" "Python") ("pbs" "PBS") ("g" "Gnuplot"))))
-;;          (shebang-line (cond ((string= language "b") "#!/bin/bash")
-;;                              ((string= language "p") "#!/usr/bin/env python")
-;;                              ((string= language "pbs") "#!/bin/bash\n#PBS -l nodes=1:ppn=2\n#PBS -q normal\n#PBS -N processing")
-;;                              ((string= language "g") "#!/usr/bin/env gnuplot")
-;;                              (t ""))))
-;;     (if (file-exists-p file-path)
-;;         (message "File already exists!")
-;;       (with-temp-file file-path
-;;         (insert shebang-line "\n")))
-;;       (shell-command (format "chmod +x %s" file-path)) ; Set executable permissions
-;;       (find-file file-path)
-;;       (message "Script %s created with shebang line: %s"
-;;                file-name shebang-line)))
-
-;; (global-set-key (kbd "C-c j") 'create-script-with-shebang)
+(global-set-key (kbd "C-x C-v") 'compare-files-with-gvim)
 
 (defun create-script-with-shebang-and-gnuplot (file-name)
   "Create a new script file with a specified shebang line and open in Emacs.
    Include a sample Gnuplot script in the file."
   (interactive "sEnter script name: ")
   (let* ((file-path (expand-file-name file-name))
-         (language (completing-read "Choose shebang (Bash [b] | Python [p] | PBS [pbs] | Gnuplot [g]): "
-                                    '(("b" "Bash") ("p" "Python") ("pbs" "PBS") ("g" "Gnuplot"))))
+         (language (completing-read "Choose shebang (Bash [b] | Python [p] | PBS [s] | Gnuplot [g] | R [r] | Texte [t]): "
+                                    '(("b" "Bash") ("p" "Python") ("s" "PBS") ("g" "Gnuplot") ("r" "R") ("t" "Texte")  )))
          (shebang-line (cond ((string= language "b") "#!/bin/bash")
                              ((string= language "p") "#!/usr/bin/env python")
-                             ((string= language "pbs") "#!/bin/bash\n#PBS -l nodes=1:ppn=2\n#PBS -q normal\n#PBS -N processing")
+                             ((string= language "s") "#!/bin/bash\n#PBS -l nodes=1:ppn=2\n#PBS -q normal\n#PBS -N processing")
                              ((string= language "g") "#!/usr/bin/env gnuplot")
+                             ((string= language "R") "#!/usr/bin/env Rscript")
+                             ((string= language "t") "") ; no shebang for .txt
                              (t (format "#!/usr/bin/env %s" language))))
          (gnuplot-content (if (string= language "g")
                               (concat "
@@ -1217,7 +1016,6 @@ do for [i=1:words(ch)] {
                file-name shebang-line))))
 
 (global-set-key (kbd "C-c j") 'create-script-with-shebang-and-gnuplot)
-
 
 (defun copy-directory-path ()
   "Copy the path of the current directory in Dired mode to the clipboard."
@@ -1508,4 +1306,497 @@ replot
 
 (setq eshell-prompt-function
       (lambda ()
-        (concat (propertize "λ " 'face '(:foreground "magenta" :bold t)))))
+        (concat (propertize "|> " 'face '(:foreground "magenta" :bold t)))))
+
+(setq image-dired-thumb-size 256
+      image-dired-thumb-width 256
+      image-dired-thumb-height 256)
+
+(load "~/.emacs.d/site-lisp/kwustoss-mode/kwustoss-minor-mode.el")
+
+(define-key dired-mode-map (kbd "* .") 'dired-mark-extension)
+
+(defun dired-convert-svg-to-emf ()
+  "Convert selected .svg files in Dired to .emf using Inkscape with a process limit."
+  (interactive)
+  (let* ((inkscape-path "/nfs/system/inkscape/Inkscape-e86c870-x86_64.AppImage")
+         (files (dired-get-marked-files))
+         (max-parallel 4))  ;; Adjust this number as needed
+    (while files
+      (let ((batch (seq-take files max-parallel)))  ;; Take a batch of `max-parallel` files
+        (setq files (seq-drop files max-parallel))  ;; Remove processed files from list
+        (dolist (file batch)
+          (let ((output-file (concat (file-name-sans-extension file) ".emf")))
+            (start-process "inkscape-convert" "*inkscape-output*"
+                           inkscape-path
+                           file
+                           "--export-type=emf"
+                           "--export-filename" output-file)))
+        (sleep-for 1)))  ;; Small delay to avoid overloading system
+    (message "All conversions completed!")))
+
+(with-eval-after-load 'dired
+  (define-key dired-mode-map (kbd "C-c C-e") 'dired-convert-svg-to-emf))
+
+(defun autotab-plain ()
+  "Smart preview of delimited text files using pandas (Python 3.12+).
+Detects separator, skips non-numeric headers, shows 100 rows.
+Displays both output and the generated Python script using pandas' default view."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Text Preview*")
+         (script-buffer "*Text Preview Script*")
+         (script
+"import sys
+import pandas as pd
+import re
+
+filename = sys.argv[1]
+with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+    lines = f.readlines()
+
+sample = ''.join(lines[:20])
+candidate_separators = [',', ';', '\\t', '|']
+sep_scores = {}
+
+# Heuristic: consistent field count and low stddev suggests good separator
+for sep in candidate_separators:
+    pattern = re.escape(sep)
+    counts = [len(re.split(pattern, line.strip())) for line in lines[:20] if line.strip()]
+    if counts:
+        std = pd.Series(counts).std()
+        if std < 1.0 and max(counts) > 1:
+            sep_scores[sep] = sum(counts)
+
+if sep_scores:
+    sep = max(sep_scores, key=sep_scores.get)
+    engine = 'c'
+else:
+    sep = r'\\s+'
+    engine = 'python'
+
+def is_data_line(line):
+    tokens = re.split(sep, line.strip())
+    try:
+        floats = [float(t) for t in tokens if t.strip()]
+        return len(floats) >= 2
+    except:
+        return False
+
+start_row = 0
+for i, line in enumerate(lines[:20]):
+    if is_data_line(line):
+        start_row = i
+        break
+
+try:
+    df = pd.read_csv(filename, sep=sep, header=None, skiprows=start_row, nrows=100, engine=engine)
+
+    # Print using the default pandas view (without tabulate)
+    print(df.head(100).to_string(index=False))
+except Exception as e:
+    print(f'Error reading file: {e}')
+"))
+    ;; Show script for inspection
+    (with-current-buffer (get-buffer-create script-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert script)
+      (python-mode)
+      (read-only-mode 1))
+    ;; Run script and display output
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code (call-process "python3" nil t nil "-c" script file)))
+        (if (= exit-code 0)
+            (progn
+              (goto-char (point-min))
+              (read-only-mode 1)
+              (display-buffer output-buffer))
+          (message "Failed to preview file."))))))
+
+(defun autotab ()
+  "Smart preview of delimited text files using pandas/tabulate (Python 3.12+).
+Detects separator, skips non-numeric headers, shows 100 rows.
+Displays both output and the generated Python script."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Text Preview*")
+         (script-buffer "*Text Preview Script*")
+         (script
+"import sys
+import pandas as pd
+import re
+
+filename = sys.argv[1]
+with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+    lines = f.readlines()
+
+sample = ''.join(lines[:20])
+candidate_separators = [',', ';', '\\t', '|']
+sep_scores = {}
+
+# Heuristic: consistent field count and low stddev suggests good separator
+for sep in candidate_separators:
+    pattern = re.escape(sep)
+    counts = [len(re.split(pattern, line.strip())) for line in lines[:20] if line.strip()]
+    if counts:
+        std = pd.Series(counts).std()
+        if std < 1.0 and max(counts) > 1:
+            sep_scores[sep] = sum(counts)
+
+if sep_scores:
+    sep = max(sep_scores, key=sep_scores.get)
+    engine = 'c'
+else:
+    sep = r'\\s+'
+    engine = 'python'
+
+def is_data_line(line):
+    tokens = re.split(sep, line.strip())
+    try:
+        floats = [float(t) for t in tokens if t.strip()]
+        return len(floats) >= 2
+    except:
+        return False
+
+start_row = 0
+for i, line in enumerate(lines[:20]):
+    if is_data_line(line):
+        start_row = i
+        break
+
+try:
+    df = pd.read_csv(filename, sep=sep, header=None, skiprows=start_row, nrows=100, engine=engine)
+    try:
+        from tabulate import tabulate
+        print(tabulate(df.values.tolist(), headers=df.columns, tablefmt='grid'))
+    except ImportError:
+        print(df.to_string(index=False))
+except Exception as e:
+    print(f'Error reading file: {e}')
+"))
+    ;; Show script for inspection
+    (with-current-buffer (get-buffer-create script-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert script)
+      (python-mode)
+      (read-only-mode 1))
+    ;; Run script and display output
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code (call-process "python3" nil t nil "-c" script file)))
+        (if (= exit-code 0)
+            (progn
+              (goto-char (point-min))
+              (read-only-mode 1)
+              (display-buffer output-buffer))
+          (message "Failed to preview file."))))))
+
+;; Define keybindings
+(global-set-key (kbd "C-c C-v") #'autotab)        ;; Default behavior with tabulate
+(global-set-key (kbd "C-c C-x") #'autotab-plain)   ;; Plain pandas view (no tabulate)
+
+(defvar autoplot-process nil
+  "The last Gnuplot process started by autoplot.")
+
+(defun autoplot-full (xcol ycols xlabel ylabel title terminal xrange-min xrange-max yrange-min yrange-max every-n)
+  "Full-featured Gnuplot plotting function."
+  (interactive
+   (list
+    (read-string "X column (default 1): " "1")
+    (read-string "Y column(s) (e.g. 2 or 6 7 8): " "2")
+    (read-string "X label: ")
+    (read-string "Y label: ")
+    (read-string "Title: ")
+    (completing-read "Terminal (qt, x11, png, svg, dumb): " '("qt" "x11" "png" "svg" "dumb") nil t "qt")
+    (read-string "X range min (Enter for auto): ")
+    (read-string "X range max (Enter for auto): ")
+    (read-string "Y range min (Enter for auto): ")
+    (read-string "Y range max (Enter for auto): ")
+    (read-string "Plot every N-th line (e.g. 10, default 1): " "1")))
+
+  (let* ((files (dired-get-marked-files))
+         (first-file (car files))
+         (basename (if (= (length files) 1)
+                       (file-name-base first-file)
+                     "multi_autoplot"))
+         (lines (with-temp-buffer
+                  (insert-file-contents first-file nil 0 1000)
+                  (split-string (buffer-string) "\n")))
+         (separator
+          (cond
+           ((string-match-p "," (car lines)) "','")
+           ((string-match-p ";" (car lines)) "';'")
+           ((string-match-p "\t" (car lines)) "'\t'")
+           (t "whitespace")))
+         (skip-lines
+          (number-to-string
+           (or (cl-position-if
+                (lambda (line)
+                  (let* ((clean (replace-regexp-in-string "[ \t]+" " " line))
+                         (parts (split-string clean))
+                         (nums (cl-remove-if-not #'string-to-number parts)))
+                    (>= (length nums) 2)))
+                lines :end 20)
+               0)))
+         (script-file (expand-file-name (concat basename ".plt")
+                                        (file-name-directory first-file)))
+         (plot-lines '())
+         (style-base 13)
+         (style-max 21)
+         (style-index 0))
+
+    ;; Build plot lines
+    (dolist (file files)
+      (let ((label-base (replace-regexp-in-string "_" "\\\\_" (file-name-base file))))
+        (dolist (ycol (split-string ycols))
+          (setq style-index (1+ style-index))
+          (let ((style-num (+ style-base (mod (1- style-index) (- style-max style-base +1)))))
+            (push (format "'%s' using %s:%s every %s::%s w l ls %d lw 2 title \"%s col %s\""
+                          (file-name-nondirectory file)
+                          xcol ycol every-n skip-lines
+                          style-num label-base ycol)
+                  plot-lines)))))
+
+    ;; Terminal setup
+    (let* ((term-line
+            (cond
+             ((string= terminal "qt") "set term qt\nset termoption noenhanced")
+             ((string= terminal "x11") "set term x11\nset termoption noenhanced")
+             ((string= terminal "png") "set term png size 1000,600\nset termoption noenhanced")
+             ((string= terminal "svg") "set term svg size 1000,600 font 'Arial,12'\nset termoption noenhanced")
+             ((string= terminal "dumb") "set term dumb 120 40")
+             (t "set term qt\nset termoption noenhanced")))
+           (output-line
+            (if (member terminal '("png" "svg"))
+                (format "set output '%s.%s'" basename terminal)
+              ""))
+           (xrange-line (unless (and (string= xrange-min "") (string= xrange-max ""))
+                          (format "set xrange [%s:%s]"
+                                  (if (string= xrange-min "") "*" xrange-min)
+                                  (if (string= xrange-max "") "*" xrange-max))))
+           (yrange-line (unless (and (string= yrange-min "") (string= yrange-max ""))
+                          (format "set yrange [%s:%s]"
+                                  (if (string= yrange-min "") "*" yrange-min)
+                                  (if (string= yrange-max "") "*" yrange-max))))
+           (pause-line (if (member terminal '("qt" "x11")) "pause -1" ""))
+           (script (format "
+set datafile separator %s
+%s
+%s
+
+# Base styles
+set style line 1 lc rgb '#377eb8' pt 7 ps 1 lt 1 lw 3
+set style line 2 lc rgb '#e41a1c' pt 7 ps 1 lt 1 lw 3
+set style line 11 lc rgb '#808080' lt 1
+set border 3 back ls 11
+set tics nomirror
+set style line 12 lc rgb '#808080' lt 0 lw 1
+set key top right font \",13\" tc rgb '#606060'
+set xtics font \",13\"
+set ytics font \",13\"
+
+# Color palette (13–21)
+set style line 13 lw 2 lt 1 pt 7 lc rgb '#0072bd'
+set style line 14 lw 2 lt 1 pt 7 lc rgb '#d95319'
+set style line 15 lw 2 lt 1 pt 7 lc rgb '#edb120'
+set style line 16 lw 2 lt 1 pt 7 lc rgb '#7e2f8e'
+set style line 17 lw 2 lt 1 pt 7 lc rgb '#77ac30'
+set style line 18 lw 2 lt 1 pt 7 lc rgb '#4dbeee'
+set style line 19 lw 2 lt 1 pt 7 lc rgb '#c06c84'
+set style line 20 lw 2 lt 1 pt 7 lc rgb '#7f4e34'
+set style line 21 lw 2 lt 1 pt 7 lc rgb '#606060'
+
+set xlabel '%s' font \",13\" tc rgb '#606060'
+set ylabel '%s' font \",13\" tc rgb '#606060'
+set title  '%s' font ',13' tc rgb '#606060'
+
+%s
+%s
+
+plot \\
+%s
+
+%s"
+                   separator term-line output-line
+                   xlabel ylabel title
+                   (or xrange-line "")
+                   (or yrange-line "")
+                   (mapconcat #'identity (reverse plot-lines) ",\\\n")
+                   pause-line)))
+
+      ;; Write and run
+      (with-temp-file script-file
+        (insert script))
+
+      (if (string= terminal "dumb")
+          (with-current-buffer (get-buffer-create "*autoplot*")
+            (erase-buffer)
+            (call-process "gnuplot" nil (current-buffer) nil script-file)
+            (display-buffer (current-buffer)))
+        (progn
+          (when (process-live-p autoplot-process)
+            (kill-process autoplot-process))
+          (setq autoplot-process
+                (start-process "autoplot-gnuplot" "*autoplot*" "gnuplot" script-file))
+          (message "Plotted %d curve(s) using terminal '%s'." style-index terminal))))))
+
+(defun autoplot-default ()
+  "Quick autoplot with default values (qt terminal)."
+  (interactive)
+  (autoplot-full "1" "2" "" "" "" "qt" "" "" "" "" "1"))
+
+(defun autoplot-dumb ()
+  "Quick autoplot with default values using dumb terminal (ASCII plot in buffer)."
+  (interactive)
+  (autoplot-full "1" "2" "" "" "" "dumb" "" "" "" "" "1"))
+
+(defun autoplot (&optional arg)
+  "Main autoplot command.
+Runs quick version by default, or full prompt if ARG is given (e.g. with C-u)."
+  (interactive "P")
+  (if arg
+      (call-interactively #'autoplot-full)
+    (autoplot-default)))
+
+(global-set-key (kbd "C-c C-p") #'autoplot)
+(global-set-key (kbd "C-c C-d") #'autoplot-dumb)
+
+(defun excel-viewer-tabular ()
+  "Display the content of a selected Excel .xlsx file in Dired using Python, pandas, and tabulate."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Excel View*")
+         (script "
+import sys
+import pandas as pd
+from tabulate import tabulate
+
+def heuristic_header(df):
+    # A simple heuristic to find the header row by looking for non-numeric values
+    for i, row in df.iterrows():
+        if row.apply(lambda x: isinstance(x, str) and len(x) > 0).any():
+            return i
+    return 0  # Default to 0 if no header row found
+
+try:
+    # Load the Excel file without a header
+    df = pd.read_excel(sys.argv[1], header=None)
+
+    # Use heuristic to find the first valid header row
+    header_row = heuristic_header(df)
+
+    # Set the header row and drop it from the data
+    df.columns = df.iloc[header_row]
+    df = df.drop(header_row)
+
+    # Round the floating-point values to 2 decimal places
+    df = df.round(2)
+
+    # Display the first 50 rows with tabulate
+    print(tabulate(df.head(50), headers='keys', tablefmt='grid'))
+except Exception as e:
+    print(f'Error: {e}')
+"))
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code (call-process "python3" nil t nil "-c" script file)))
+        (if (= exit-code 0)
+            (progn
+              (goto-char (point-min))
+              (read-only-mode 1)
+              (display-buffer output-buffer))
+          (message "Failed to read Excel file."))))))
+
+(defun excel-viewer ()
+  "Display the content of a selected Excel .xlsx file in Dired using Python and pandas (plain view without tabulate, showing all columns on the same line)."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Excel View*")
+         (script "
+import sys
+import pandas as pd
+
+def heuristic_header(df):
+    # A simple heuristic to find the header row by looking for non-numeric values
+    for i, row in df.iterrows():
+        if row.apply(lambda x: isinstance(x, str) and len(x) > 0).any():
+            return i
+    return 0  # Default to 0 if no header row found
+
+try:
+    # Load the Excel file without a header
+    df = pd.read_excel(sys.argv[1], header=None)
+
+    # Use heuristic to find the first valid header row
+    header_row = heuristic_header(df)
+
+    # Set the header row and drop it from the data
+    df.columns = df.iloc[header_row]
+    df = df.drop(header_row)
+
+    # Round the floating-point values to 2 decimal places
+    df = df.round(2)
+
+    # Ensure all columns are shown on the same line
+    pd.set_option('display.max_columns', 100)  # Show all columns
+    pd.set_option('display.max_colwidth', None) 
+    pd.set_option('display.width', 1000)       # No wrapping of columns
+    pd.set_option('display.max_rows', 100)      # Limit the number of rows shown
+
+    # Display the first 50 rows with the default pandas view (no tabulate)
+    print(df.head(50))
+except Exception as e:
+    print(f'Error: {e}')
+"))
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code (call-process "python3" nil t nil "-c" script file)))
+        (if (= exit-code 0)
+            (progn
+              (goto-char (point-min))
+              (read-only-mode 1)
+              (display-buffer output-buffer))
+          (message "Failed to read Excel file."))))))
+
+(defun smart-tabular-view ()
+  "Smart preview: Excel → excel-viewer-tabular, else → autotab."
+  (interactive)
+  (let ((file (dired-get-file-for-visit)))
+    (if (excel-file-p file)
+        (excel-viewer-tabular)
+      (autotab))))
+
+(defun smart-plain-view ()
+  "Smart preview: Excel → excel-viewer, else → autotab-plain."
+  (interactive)
+  (let ((file (dired-get-file-for-visit)))
+    (if (excel-file-p file)
+        (excel-viewer)
+      (autotab-plain))))
+
+(global-set-key (kbd "C-c C-v") #'smart-tabular-view) ;; grid/tabulate view
+(global-set-key (kbd "C-c C-x") #'smart-plain-view)   ;; plain pandas view
+
+(defun pbs ()
+  "Run `qstat -u bdulauroy` and display the output in a temporary buffer named *pbs*."
+  (interactive)
+  (let ((buffer-name "*pbs*"))
+    (with-current-buffer (get-buffer-create buffer-name)
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert (shell-command-to-string "qstat -u bdulauroy"))
+      (read-only-mode 1)
+      (display-buffer (current-buffer)))))
+
+(require 'go-mode)
+
+;; (use-package csharp-mode
+;;   :ensure t
+;;   :mode "\\.cs\\'")
