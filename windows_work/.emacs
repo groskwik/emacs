@@ -211,6 +211,8 @@
 ;; (require 'sunrise-tree)
 ;; (require 'sunrise-w32)
 
+;; Modern replacement for linum-mode
+(global-display-line-numbers-mode t)
 
 ;; copy by default to the other window (dired)
 (setq dired-dwim-target t)
@@ -1372,7 +1374,7 @@ If the current Dired buffer is remote (`psftp:`), it downloads files to the loca
         (shell-command (format "%s %s %s" gvim-command left-file right-file))
       (message "Please open two files for comparison first."))))
 
-(global-set-key (kbd "C-c C-v") 'compare-files-with-gvim)
+(global-set-key (kbd "C-x C-v") 'compare-files-with-gvim)
 
 (defun dired-convert-svg-to-emf ()
   "Convert selected .svg files in Dired to .emf using Inkscape with a process limit."
@@ -1429,10 +1431,25 @@ If the current Dired buffer is remote (`psftp:`), it downloads files to the loca
     (kbd "RET") #'my/dired-ret
     (kbd "<return>") #'my/dired-ret))
 
-(defun text-preview-smart-dired ()
-  "Smart preview of delimited text files in Dired using pandas (Python 3.12+ compatible).
-Detects separator, finds where numeric data starts, shows 100 rows.
-Also opens the Python script in a buffer for inspection."
+
+
+;;; autotab.el --- Smart delimited-text preview via pandas -*- lexical-binding: t; -*-
+
+;; Configure which Python to use.
+;; - Linux/macOS: defaults to "python3"
+;; - Windows: point to your conda env python.exe
+(defcustom autotab-python-program
+  (cond
+   ((eq system-type 'windows-nt)
+    "C:/Users/bdulauroy/AppData/Roaming/Mf3/envs/py312/python.exe")
+   (t "python3"))
+  "Python executable used by `autotab` and `autotab-plain`."
+  :type 'string)
+
+(defun autotab-plain ()
+  "Smart preview of delimited text files using pandas (Python 3.12+).
+Detects separator, skips non-numeric headers, shows 100 rows.
+Displays both output and the generated Python script using pandas' default view."
   (interactive)
   (let* ((file (dired-get-file-for-visit))
          (output-buffer "*Text Preview*")
@@ -1482,31 +1499,117 @@ for i, line in enumerate(lines[:20]):
 
 try:
     df = pd.read_csv(filename, sep=sep, header=None, skiprows=start_row, nrows=100, engine=engine)
-    print(df.to_string(index=False))
+
+    # Print using the default pandas view (without tabulate)
+    print(df.head(100).to_string(index=False))
 except Exception as e:
     print(f'Error reading file: {e}')
 "))
-    ;; Show script for inspection/debugging
+    ;; Show script for inspection
     (with-current-buffer (get-buffer-create script-buffer)
       (read-only-mode -1)
       (erase-buffer)
       (insert script)
       (python-mode)
-      (read-only-mode 1))
-    ;; Run Python and show output
+      (read-only-mode 1)
+      (display-buffer script-buffer))
+    ;; Run script and display output (capture stdout + stderr)
     (with-current-buffer (get-buffer-create output-buffer)
       (read-only-mode -1)
       (erase-buffer)
-      (let ((exit-code (call-process "python3" nil t nil "-c" script file)))
-        (if (= exit-code 0)
-            (progn
-              (goto-char (point-min))
-              (read-only-mode 1)
-              (display-buffer output-buffer))
-          (message "Failed to preview file."))))))
+      (let ((exit-code
+             (call-process autotab-python-program nil (list t t) nil "-c" script file)))
+        (goto-char (point-min))
+        (read-only-mode 1)
+        (display-buffer output-buffer)
+        (unless (= exit-code 0)
+          (message "autotab-plain: Failed (exit %d). See %s for details."
+                   exit-code output-buffer))))))
 
-(with-eval-after-load 'dired
-  (define-key dired-mode-map (kbd "C-c C-v") #'text-preview-smart-dired))
+(defun autotab ()
+  "Smart preview of delimited text files using pandas/tabulate (Python 3.12+).
+Detects separator, skips non-numeric headers, shows 100 rows.
+Displays both output and the generated Python script."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Text Preview*")
+         (script-buffer "*Text Preview Script*")
+         (script
+"import sys
+import pandas as pd
+import re
+
+filename = sys.argv[1]
+with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+    lines = f.readlines()
+
+sample = ''.join(lines[:20])
+candidate_separators = [',', ';', '\\t', '|']
+sep_scores = {}
+
+# Heuristic: consistent field count and low stddev suggests good separator
+for sep in candidate_separators:
+    pattern = re.escape(sep)
+    counts = [len(re.split(pattern, line.strip())) for line in lines[:20] if line.strip()]
+    if counts:
+        std = pd.Series(counts).std()
+        if std < 1.0 and max(counts) > 1:
+            sep_scores[sep] = sum(counts)
+
+if sep_scores:
+    sep = max(sep_scores, key=sep_scores.get)
+    engine = 'c'
+else:
+    sep = r'\\s+'
+    engine = 'python'
+
+def is_data_line(line):
+    tokens = re.split(sep, line.strip())
+    try:
+        floats = [float(t) for t in tokens if t.strip()]
+        return len(floats) >= 2
+    except:
+        return False
+
+start_row = 0
+for i, line in enumerate(lines[:20]):
+    if is_data_line(line):
+        start_row = i
+        break
+
+try:
+    df = pd.read_csv(filename, sep=sep, header=None, skiprows=start_row, nrows=100, engine=engine)
+    try:
+        from tabulate import tabulate
+        print(tabulate(df.values.tolist(), headers=df.columns, tablefmt='grid'))
+    except ImportError:
+        print(df.to_string(index=False))
+except Exception as e:
+    print(f'Error reading file: {e}')
+"))
+    ;; Show script for inspection
+    (with-current-buffer (get-buffer-create script-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert script)
+      (python-mode)
+      (read-only-mode 1)
+      (display-buffer script-buffer))
+    ;; Run script and display output (capture stdout + stderr)
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code
+             (call-process autotab-python-program nil (list t t) nil "-c" script file)))
+        (goto-char (point-min))
+        (read-only-mode 1)
+        (display-buffer output-buffer)
+        (unless (= exit-code 0)
+          (message "autotab: Failed (exit %d). See %s for details."
+                   exit-code output-buffer))))))
+
+(provide 'autotab)
+;;; autotab.el ends here
 
 (defvar autoplot-process nil
   "The last Gnuplot process started by autoplot.")
@@ -1673,6 +1776,81 @@ Runs quick version by default, or full prompt if ARG is given (e.g. with C-u)."
 
 (global-set-key (kbd "C-c C-p") #'autoplot)
 (global-set-key (kbd "C-c C-d") #'autoplot-dumb)
+
+(defun excel-file-p (file)
+  "Return non-nil if FILE looks like an Excel file."
+  (let ((ext (downcase (file-name-extension file))))
+    (member ext '("xlsx" "xls" "xlsm"))))
+
+(defconst excel-viewer-python
+  (if (eq system-type 'windows-nt)
+      "C:/Users/bdulauroy/AppData/Roaming/Mf3/envs/py312/python.exe"
+    "python3"))
+(defun excel-viewer-tabular ()
+  "Display the content of a selected Excel .xlsx file in Dired using Python, pandas, and tabulate."
+  (interactive)
+  (let* ((file (dired-get-file-for-visit))
+         (output-buffer "*Excel View*")
+         (script "
+import sys
+import pandas as pd
+from tabulate import tabulate
+
+def heuristic_header(df):
+    # A simple heuristic to find the header row by looking for non-numeric values
+    for i, row in df.iterrows():
+        if row.apply(lambda x: isinstance(x, str) and len(x) > 0).any():
+            return i
+    return 0  # Default to 0 if no header row found
+
+try:
+    # Load the Excel file without a header
+    df = pd.read_excel(sys.argv[1], header=None)
+
+    # Use heuristic to find the first valid header row
+    header_row = heuristic_header(df)
+
+    # Set the header row and drop it from the data
+    df.columns = df.iloc[header_row]
+    df = df.drop(header_row)
+
+    # Round the floating-point values to 2 decimal places
+    df = df.round(2)
+
+    # Display the first 50 rows with tabulate
+    print(tabulate(df.head(50), headers='keys', tablefmt='grid'))
+except Exception as e:
+    print(f'Error: {e}')
+"))
+    (with-current-buffer (get-buffer-create output-buffer)
+      (read-only-mode -1)
+      (erase-buffer)
+      (let ((exit-code (call-process excel-viewer-python nil t nil "-c" script file)))
+        (if (= exit-code 0)
+            (progn
+              (goto-char (point-min))
+              (read-only-mode 1)
+              (display-buffer output-buffer))
+          (message "Failed to read Excel file."))))))
+
+(defun smart-tabular-view ()
+  "Smart preview: Excel → excel-viewer-tabular, else → autotab."
+  (interactive)
+  (let ((file (dired-get-file-for-visit)))
+    (if (excel-file-p file)
+        (excel-viewer-tabular)
+      (autotab))))
+
+(defun smart-plain-view ()
+  "Smart preview: Excel → excel-viewer, else → autotab-plain."
+  (interactive)
+  (let ((file (dired-get-file-for-visit)))
+    (if (excel-file-p file)
+        (excel-viewer)
+      (autotab-plain))))
+
+(global-set-key (kbd "C-c C-v") #'smart-tabular-view) ;; grid/tabulate view
+(global-set-key (kbd "C-c C-x") #'smart-plain-view)   ;; plain pandas view
 
 (require 'tramp-term)
 
@@ -1961,3 +2139,4 @@ Scans only the first 30 lines for /TITLE, /PREP7, /SOLU, /POST1, or /POST26."
 ;; disable inline compression for TRAMP
 (with-eval-after-load 'tramp
   (setq tramp-inline-compress-start-size nil))
+
